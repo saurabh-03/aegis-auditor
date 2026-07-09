@@ -1,0 +1,60 @@
+/** Central registry of all scanning modules. */
+
+import type { ScanModule } from '../core/types.js';
+import { cookiesModule } from './cookies.js';
+import { corsModule } from './cors.js';
+import { crawlModule } from './crawl.js';
+import { cspModule } from './csp.js';
+import { dependenciesModule } from './dependencies.js';
+import { dnsModule } from './dns.js';
+import { securityHeadersModule } from './headers.js';
+import { httpModule } from './http.js';
+import { imagesModule } from './images.js';
+import { jsSecurityModule } from './jssecurity.js';
+import { performanceModule } from './performance.js';
+import { scalabilityModule } from './scalability.js';
+import { seoModule } from './seo.js';
+import { sslModule } from './ssl.js';
+import { techModule } from './tech.js';
+import { portsModule } from './active/ports.js';
+import { exposureModule } from './active/exposure.js';
+
+/** All modules, passive first then active. Order is display-only. */
+export const ALL_MODULES: ScanModule[] = [
+  sslModule,
+  securityHeadersModule,
+  cspModule,
+  cookiesModule,
+  corsModule,
+  dnsModule,
+  techModule,
+  dependenciesModule,
+  httpModule,
+  performanceModule,
+  imagesModule,
+  jsSecurityModule,
+  crawlModule,
+  seoModule,
+  scalabilityModule,
+  // Active (authorization-gated):
+  portsModule,
+  exposureModule,
+];
+
+export const PASSIVE_MODULES = ALL_MODULES.filter((m) => m.mode === 'passive');
+export const ACTIVE_MODULES = ALL_MODULES.filter((m) => m.mode === 'active');
+
+export function moduleByName(name: string): ScanModule | undefined {
+  return ALL_MODULES.find((m) => m.name === name);
+}
+
+/** Lightweight catalog for the UI/docs. */
+export function moduleCatalog() {
+  return ALL_MODULES.map((m) => ({
+    name: m.name,
+    title: m.title,
+    category: m.category,
+    mode: m.mode,
+    description: m.description,
+  }));
+}

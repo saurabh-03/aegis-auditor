@@ -1,0 +1,301 @@
+// Aegis Auditor — production database schema (target state).
+// The MVP uses an in-memory store (src/api/store.ts); this schema is the
+// documented PostgreSQL target that store swaps into. See docs/DATABASE.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Identity & tenancy ----------
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  avatarUrl     String?
+  passwordHash  String? // null when OAuth-only
+  emailVerified DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  memberships   Membership[]
+  oauthAccounts OAuthAccount[]
+  apiKeys       ApiKey[]
+  scans         Scan[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+}
+
+model OAuthAccount {
+  id             String @id @default(cuid())
+  userId         String
+  provider       String // "google" | "github"
+  providerUserId String
+  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+}
+
+model Organization {
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  plan      Plan         @default(FREE)
+  createdAt DateTime     @default(now())
+
+  members   Membership[]
+  teams     Team[]
+  projects  Project[]
+  apiKeys   ApiKey[]
+  auditLogs AuditLog[]
+}
+
+model Membership {
+  id     String @id @default(cuid())
+  userId String
+  orgId  String
+  role   Role   @default(MEMBER)
+
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teams  TeamMember[]
+
+  @@unique([userId, orgId])
+}
+
+model Team {
+  id      String       @id @default(cuid())
+  orgId   String
+  name    String
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members TeamMember[]
+  projects Project[]
+}
+
+model TeamMember {
+  id           String     @id @default(cuid())
+  teamId       String
+  membershipId String
+  team         Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, membershipId])
+}
+
+// ---------- Targets & scans ----------
+
+model Project {
+  id             String    @id @default(cuid())
+  orgId          String
+  teamId         String?
+  name           String
+  target         String // hostname or base URL
+  ownershipToken String? // for verifying active-scan authorization
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team  Team?        @relation(fields: [teamId], references: [id])
+  scans Scan[]
+
+  @@index([orgId])
+}
+
+model Scan {
+  id          String     @id @default(cuid())
+  projectId   String? // null for ad-hoc scans not tied to a saved project
+  orgId       String?
+  userId      String?
+  status      ScanStatus @default(QUEUED)
+  mode        ScanMode   @default(PASSIVE)
+  authorized  Boolean    @default(false)
+  overall     Int? // 0..100
+  grade       String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  durationMs  Int?
+  engineVer   String?
+  error       String?
+  // Full AuditReport payload for fast retrieval/history. Normalized Finding/
+  // CategoryScore rows (below) are populated for analytics in later phases.
+  resultJson  Json?
+  createdAt   DateTime   @default(now())
+
+  project     Project?          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User?             @relation(fields: [userId], references: [id])
+  findings    Finding[]
+  categories  CategoryScore[]
+  technologies ScanTechnology[]
+  report      Report?
+
+  @@index([projectId, createdAt])
+  @@index([orgId, createdAt])
+}
+
+model CategoryScore {
+  id       String   @id @default(cuid())
+  scanId   String
+  category String
+  score    Int
+  grade    String
+  scan     Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@unique([scanId, category])
+}
+
+model Finding {
+  id               String   @id @default(cuid())
+  scanId           String
+  findingKey       String // stable id e.g. "headers.csp.missing"
+  module           String
+  category         String
+  title            String
+  severity         String
+  status           String
+  probability      String
+  risk             String   @db.Text
+  whyItMatters     String   @db.Text
+  technical        String   @db.Text
+  businessImpact   String   @db.Text
+  remediation      String   @db.Text
+  estimatedFixTime String
+  exampleCode      String?  @db.Text
+  owasp            String[]
+  cve              String[]
+  references       String[]
+  evidence         Json?
+
+  scan    Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  cves    FindingCve[]
+
+  @@index([scanId, severity])
+  @@index([findingKey])
+}
+
+// ---------- Technology & CVE intelligence ----------
+
+model Technology {
+  id       String           @id @default(cuid())
+  name     String           @unique
+  category String
+  scans    ScanTechnology[]
+}
+
+model ScanTechnology {
+  id           String     @id @default(cuid())
+  scanId       String
+  technologyId String
+  version      String?
+  scan         Scan       @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  technology   Technology @relation(fields: [technologyId], references: [id])
+
+  @@unique([scanId, technologyId])
+}
+
+model Cve {
+  id          String       @id // e.g. "CVE-2024-1234"
+  cvss        Float?
+  severity    String?
+  summary     String?      @db.Text
+  publishedAt DateTime?
+  findings    FindingCve[]
+}
+
+model FindingCve {
+  findingId String
+  cveId     String
+  finding   Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  cve       Cve     @relation(fields: [cveId], references: [id])
+
+  @@id([findingId, cveId])
+}
+
+// ---------- Reports, history, ops ----------
+
+model Report {
+  id        String   @id @default(cuid())
+  scanId    String   @unique
+  shareSlug String?  @unique // shareable URL
+  pdfUrl    String?
+  createdAt DateTime @default(now())
+  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id         String       @id @default(cuid())
+  orgId      String
+  userId     String
+  name       String
+  hashedKey  String       @unique
+  lastUsedAt DateTime?
+  createdAt  DateTime     @default(now())
+  revokedAt  DateTime?
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id])
+}
+
+model Webhook {
+  id        String   @id @default(cuid())
+  orgId     String
+  url       String
+  secret    String
+  events    String[] // e.g. ["scan.completed"]
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String       @id @default(cuid())
+  orgId     String
+  userId    String?
+  action    String // "scan.started", "apikey.created", ...
+  metadata  Json?
+  ip        String?
+  createdAt DateTime     @default(now())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User?        @relation(fields: [userId], references: [id])
+
+  @@index([orgId, createdAt])
+}
+
+// ---------- Enums ----------
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ScanStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ScanMode {
+  PASSIVE
+  ACTIVE
+}

@@ -1,0 +1,69 @@
+# Aegis Auditor — local/staging stack.
+# `api` runs today; `postgres` and `redis` are provisioned for Phase 1+/2+.
+
+services:
+  api:
+    build: .
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: "4000"
+      HOST: "0.0.0.0"
+      LOG_LEVEL: "info"
+      DATABASE_URL: "postgresql://aegis:aegis@postgres:5432/aegis?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      AEGIS_ROLE: "api" # API enqueues only; the worker service processes scans
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["node", "dist/worker.js"]
+    environment:
+      LOG_LEVEL: "info"
+      DATABASE_URL: "postgresql://aegis:aegis@postgres:5432/aegis?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      AEGIS_ROLE: "worker"
+      SCAN_CONCURRENCY: "4"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # Scale out with: docker compose up --scale worker=3
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: aegis
+      POSTGRES_DB: aegis
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

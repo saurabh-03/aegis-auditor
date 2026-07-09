@@ -1,0 +1,40 @@
+{
+  "name": "aegis-auditor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aegis — enterprise website security & scalability auditor (defensive). Passive-by-default scanning engine, REST API, and dashboard.",
+  "type": "module",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "worker": "tsx src/worker.ts",
+    "start": "node dist/server.js",
+    "start:worker": "node dist/worker.js",
+    "build": "tsc -p tsconfig.json",
+    "scan": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "test": "node --import tsx --test test/scoring.test.ts test/headers.test.ts test/auth.test.ts test/scans.test.ts test/intel.test.ts",
+    "lint": "echo \"(configure eslint here)\" && exit 0"
+  },
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "@fastify/cors": "^9.0.1",
+    "@fastify/static": "^7.0.4",
+    "@fastify/websocket": "^10.0.1",
+    "@prisma/client": "^5.20.0",
+    "bullmq": "^5.13.0",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "@types/node": "^20.16.5",
+    "prisma": "^5.20.0"
+  }
+}

@@ -1,0 +1,34 @@
+/** Runtime configuration, environment-driven with safe defaults. */
+
+export const ENGINE_VERSION = '0.1.0';
+
+export interface AppConfig {
+  host: string;
+  port: number;
+  /** Default per-request network timeout in ms. */
+  defaultTimeoutMs: number;
+  /** User-Agent used for all outbound requests. */
+  userAgent: string;
+  /** Max scans allowed per window per client (simple in-memory rate limit). */
+  rateLimit: { windowMs: number; max: number };
+}
+
+function int(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export const config: AppConfig = {
+  host: process.env.HOST ?? '0.0.0.0',
+  port: int('PORT', 4000),
+  defaultTimeoutMs: int('SCAN_TIMEOUT_MS', 12_000),
+  userAgent:
+    process.env.USER_AGENT ??
+    'AegisAuditor/0.1 (+https://example.com/aegis; defensive-security-scanner)',
+  rateLimit: {
+    windowMs: int('RATE_LIMIT_WINDOW_MS', 60_000),
+    max: int('RATE_LIMIT_MAX', 20),
+  },
+};
