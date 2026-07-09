@@ -38,6 +38,10 @@ export interface CategoryScore {
   findingCounts: Record<FindingStatus, number>;
 }
 
+/** Per-module structured data used by the inspector panels. Loosely typed
+ *  because each module contributes its own shape (see src/modules/*). */
+export type ModuleData = Record<string, unknown>;
+
 export interface AuditReport {
   target: string;
   scannedAt: string;
@@ -45,6 +49,7 @@ export interface AuditReport {
   overall: { score: number; grade: string };
   categories: CategoryScore[];
   findings: Finding[];
+  data?: Record<string, ModuleData | undefined>;
   meta: { engineVersion: string; passiveOnly: boolean };
 }
 

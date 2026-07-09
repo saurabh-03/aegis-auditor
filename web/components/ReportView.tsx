@@ -5,6 +5,7 @@ import { ScoreGauge } from './ScoreGauge';
 import { CategoryCards } from './CategoryCards';
 import { FindingList } from './FindingList';
 import { AdvisorPanel } from './AdvisorPanel';
+import { Inspectors } from './Inspectors';
 
 function summary(report: AuditReport) {
   const c = { critical: 0, high: 0, medium: 0, low: 0, passed: 0 };
@@ -69,6 +70,8 @@ export function ReportView({ report, reportId }: { report: AuditReport; reportId
           </div>
         </>
       )}
+
+      <Inspectors report={report} />
 
       <div>
         <div className="mb-3 text-sm font-semibold">Issue Explorer</div>

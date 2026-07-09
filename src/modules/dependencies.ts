@@ -94,7 +94,17 @@ export const dependenciesModule: ScanModule = {
       ok: true,
       findings,
       durationMs: Math.round(performance.now() - t0),
-      data: { matches: matches.map((m) => ({ component: m.component, version: m.version, cve: m.entry.cve, cvss: m.entry.cvss })) },
+      data: {
+        matches: matches.map((m) => ({
+          component: m.component,
+          version: m.version,
+          cve: m.entry.cve,
+          cvss: m.entry.cvss,
+          severity: m.entry.severity,
+          weakness: m.entry.weakness,
+          fixedIn: m.entry.fixedIn,
+        })),
+      },
     };
   },
 };
