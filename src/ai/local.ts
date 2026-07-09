@@ -45,6 +45,10 @@ export class LocalAdvisor implements Advisor {
       return `${i + 1}. ${verb} ${lowerFirst(f.remediation)} (${f.title} — ~${f.estimatedFixTime}, ${f.severity}).`;
     });
 
+    // TODO(aegis:advisor): this local advisor is deterministic templating, not
+    // inference. Enrich it with cross-scan duplicate detection and trend
+    // narratives (needs scan history from the Store), and let AnthropicAdvisor
+    // consume those groupings for richer summaries.
     return {
       provider: 'local',
       executiveSummary,

@@ -135,6 +135,14 @@ prisma/        production schema (documented target state)
 docs/          architecture, database, API, roadmap, deployment, modules, security
 ```
 
+## Contributing / extending
+
+Adding a check is one file plus one line. Start here:
+
+- [`docs/DEVELOPING.md`](docs/DEVELOPING.md) — dev loop, the module recipe, findings→UI, swap points, test conventions, and a "good first extensions" list.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — ground rules and the PR checklist.
+- Search the code for `TODO(aegis` to jump to marked extension points.
+
 ## License
 
 Provided as-is for defensive security use. Do not use against systems you do not own or

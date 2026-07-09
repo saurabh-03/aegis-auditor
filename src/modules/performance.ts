@@ -6,6 +6,10 @@
  * missing optimizations. It does NOT run a browser, so lab Core Web Vitals
  * (LCP/CLS/INP) require the headless-Chrome worker (see docs/MODULES.md); those
  * fields are surfaced there. This module focuses on what can be proven passively.
+ *
+ * TODO(aegis:cwv): add a headless-Chrome worker module (own package, own queue)
+ * that produces real lab Core Web Vitals and a per-resource waterfall, then emit
+ * that data for the (currently deliberately absent) waterfall inspector panel.
  */
 
 import { finding, pass } from '../core/finding.js';

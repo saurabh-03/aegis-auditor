@@ -45,6 +45,11 @@ export const SIGNATURES: Signature[] = [
   { name: 'Google Analytics', category: 'Analytics', html: /googletagmanager\.com\/gtag|google-analytics\.com\/analytics/i },
 ];
 
+// TODO(aegis:sca): homepage regex sniffing only sees libraries referenced in the
+// HTML — bundled/minified deps are invisible, which caps CVE detection breadth.
+// Add a manifest-based detector (package-lock.json / composer.json / yarn.lock
+// when reachable, or an authenticated repo integration) and feed its
+// components+versions into matchVulnerabilities() for real SCA coverage.
 export function detectTechnologies(page: PageSnapshot): DetectedTech[] {
   const detected: DetectedTech[] = [];
   for (const sig of SIGNATURES) {

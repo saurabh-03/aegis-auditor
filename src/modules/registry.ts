@@ -36,6 +36,9 @@ export const ALL_MODULES: ScanModule[] = [
   crawlModule,
   seoModule,
   scalabilityModule,
+  // TODO(aegis:module): register new passive checks here (SRI coverage, mixed
+  // content, form-action/mailto leaks, deeper cache analysis). One import above,
+  // one entry here — the engine handles the rest. See docs/DEVELOPING.md.
   // Active (authorization-gated):
   portsModule,
   exposureModule,
