@@ -170,15 +170,17 @@ interface Match {
   severity: string;
   weakness: string;
   fixedIn: string;
+  reference?: string;
 }
 function CvePanel({ report }: { report: AuditReport }) {
   const d = get(report, 'dependencies');
   if (!d) return null;
   const matches = (d['matches'] as Match[]) || [];
+  const source = str(d['source']) || 'dependency intel';
 
   return (
     <div className="card overflow-hidden">
-      <PanelHead title="CVE explorer" tag="dependency intel" />
+      <PanelHead title="CVE explorer" tag={source} />
       {matches.length === 0 ? (
         <div className="p-5 text-[13px] text-dim">
           <span style={{ color: 'var(--green)' }}>✓ No known CVEs matched</span> for the component versions detected on the
@@ -208,7 +210,7 @@ function CvePanel({ report }: { report: AuditReport }) {
                     <a
                       className="font-mono"
                       style={{ color: 'var(--accent)' }}
-                      href={`https://nvd.nist.gov/vuln/detail/${m.cve}`}
+                      href={m.reference || `https://nvd.nist.gov/vuln/detail/${m.cve}`}
                       target="_blank"
                       rel="noopener"
                     >

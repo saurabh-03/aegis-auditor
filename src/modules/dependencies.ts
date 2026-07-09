@@ -3,7 +3,7 @@
 import { finding, pass } from '../core/finding.js';
 import type { Finding, ModuleResult, ScanContext, ScanModule } from '../core/types.js';
 import { detectTechnologies } from './fingerprint.js';
-import { matchCves } from '../intel/cve-match.js';
+import { matchVulnerabilities } from '../intel/cve-match.js';
 
 const MODULE = 'dependencies';
 
@@ -19,7 +19,7 @@ export const dependenciesModule: ScanModule = {
     const t0 = performance.now();
     const page = await ctx.getPage();
     const detected = detectTechnologies(page);
-    const matches = matchCves(detected);
+    const { matches, sourceUsed } = await matchVulnerabilities(detected);
     const findings: Finding[] = [];
 
     // Group matches per component+version so one finding lists all its CVEs.
@@ -95,6 +95,7 @@ export const dependenciesModule: ScanModule = {
       findings,
       durationMs: Math.round(performance.now() - t0),
       data: {
+        source: sourceUsed,
         matches: matches.map((m) => ({
           component: m.component,
           version: m.version,
@@ -103,6 +104,7 @@ export const dependenciesModule: ScanModule = {
           severity: m.entry.severity,
           weakness: m.entry.weakness,
           fixedIn: m.entry.fixedIn,
+          reference: m.entry.reference,
         })),
       },
     };

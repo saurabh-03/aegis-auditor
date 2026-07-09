@@ -11,6 +11,18 @@ export interface AppConfig {
   userAgent: string;
   /** Max scans allowed per window per client (simple in-memory rate limit). */
   rateLimit: { windowMs: number; max: number };
+  /** Dependency CVE intelligence source. */
+  cve: {
+    /** 'local' = offline dataset only; 'osv' = OSV.dev only; 'both' = OSV + local, deduped. */
+    source: 'local' | 'osv' | 'both';
+    /** Per-package OSV request timeout. */
+    timeoutMs: number;
+  };
+}
+
+function cveSource(): AppConfig['cve']['source'] {
+  const v = (process.env.CVE_SOURCE ?? 'both').toLowerCase();
+  return v === 'local' || v === 'osv' || v === 'both' ? v : 'both';
 }
 
 function int(name: string, fallback: number): number {
@@ -30,5 +42,9 @@ export const config: AppConfig = {
   rateLimit: {
     windowMs: int('RATE_LIMIT_WINDOW_MS', 60_000),
     max: int('RATE_LIMIT_MAX', 20),
+  },
+  cve: {
+    source: cveSource(),
+    timeoutMs: int('CVE_TIMEOUT_MS', 6_000),
   },
 };
