@@ -3,7 +3,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
   nextRunFrom,
+  type ApiKey,
   type Membership,
+  type NewApiKey,
   type NewNotification,
   type NewSchedule,
   type NewUser,
@@ -36,6 +38,7 @@ export class MemoryStore implements Store {
   private scans = new Map<string, ScanRecord>();
   private schedules = new Map<string, Schedule>();
   private notifications = new Map<string, Notification>();
+  private apiKeys = new Map<string, ApiKey & { hashedKey: string }>();
   private orgSlugs = new Set<string>();
 
   async init(): Promise<void> {}
@@ -265,6 +268,58 @@ export class MemoryStore implements Store {
     const n = this.notifications.get(id);
     if (!n) return false;
     n.read = true;
+    return true;
+  }
+
+  // ---- API keys ----
+  private toApiKey(k: ApiKey & { hashedKey: string }): ApiKey {
+    const { hashedKey, ...pub } = k;
+    void hashedKey;
+    return pub;
+  }
+
+  async createApiKey(k: NewApiKey): Promise<ApiKey> {
+    const rec: ApiKey & { hashedKey: string } = {
+      id: randomUUID(),
+      orgId: k.orgId,
+      userId: k.userId,
+      name: k.name,
+      keyPrefix: k.keyPrefix,
+      hashedKey: k.hashedKey,
+      lastUsedAt: null,
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    this.apiKeys.set(rec.id, rec);
+    return this.toApiKey(rec);
+  }
+
+  async getApiKey(id: string): Promise<ApiKey | null> {
+    const k = this.apiKeys.get(id);
+    return k ? this.toApiKey(k) : null;
+  }
+
+  async listApiKeys(orgId: string): Promise<ApiKey[]> {
+    return [...this.apiKeys.values()]
+      .filter((k) => k.orgId === orgId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((k) => this.toApiKey(k));
+  }
+
+  async getApiKeyByHash(hashedKey: string): Promise<ApiKey | null> {
+    const k = [...this.apiKeys.values()].find((x) => x.hashedKey === hashedKey);
+    return k ? this.toApiKey(k) : null;
+  }
+
+  async touchApiKey(id: string): Promise<void> {
+    const k = this.apiKeys.get(id);
+    if (k) k.lastUsedAt = new Date().toISOString();
+  }
+
+  async revokeApiKey(id: string): Promise<boolean> {
+    const k = this.apiKeys.get(id);
+    if (!k) return false;
+    k.revokedAt = new Date().toISOString();
     return true;
   }
 }

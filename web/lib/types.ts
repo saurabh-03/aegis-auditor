@@ -83,6 +83,17 @@ export interface AdvisorOutput {
   groups: { theme: string; findingIds: string[]; count: number }[];
 }
 
+export interface ApiKey {
+  id: string;
+  orgId: string;
+  userId: string;
+  name: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
 export type Cadence = 'daily' | 'weekly' | 'monthly';
 
 export interface Schedule {

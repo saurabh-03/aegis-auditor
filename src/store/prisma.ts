@@ -10,8 +10,10 @@ import { PrismaClient, type Prisma } from '@prisma/client';
 import type { AuditReport } from '../core/types.js';
 import {
   nextRunFrom,
+  type ApiKey,
   type Cadence,
   type Membership,
+  type NewApiKey,
   type NewNotification,
   type NewSchedule,
   type NewUser,
@@ -314,7 +316,60 @@ export class PrismaStore implements Store {
     return true;
   }
 
+  // ---- API keys ----
+  async createApiKey(k: NewApiKey): Promise<ApiKey> {
+    const created = await this.prisma.apiKey.create({
+      data: { orgId: k.orgId, userId: k.userId, name: k.name, hashedKey: k.hashedKey, keyPrefix: k.keyPrefix },
+    });
+    return this.toApiKey(created);
+  }
+
+  async getApiKey(id: string): Promise<ApiKey | null> {
+    const k = await this.prisma.apiKey.findUnique({ where: { id } });
+    return k ? this.toApiKey(k) : null;
+  }
+
+  async listApiKeys(orgId: string): Promise<ApiKey[]> {
+    const rows = await this.prisma.apiKey.findMany({ where: { orgId }, orderBy: { createdAt: 'desc' } });
+    return rows.map((k) => this.toApiKey(k));
+  }
+
+  async getApiKeyByHash(hashedKey: string): Promise<ApiKey | null> {
+    const k = await this.prisma.apiKey.findUnique({ where: { hashedKey } });
+    return k ? this.toApiKey(k) : null;
+  }
+
+  async touchApiKey(id: string): Promise<void> {
+    await this.prisma.apiKey.update({ where: { id }, data: { lastUsedAt: new Date() } }).catch(() => null);
+  }
+
+  async revokeApiKey(id: string): Promise<boolean> {
+    await this.prisma.apiKey.update({ where: { id }, data: { revokedAt: new Date() } }).catch(() => null);
+    return true;
+  }
+
   // ---- mappers ----
+  private toApiKey(k: {
+    id: string;
+    orgId: string;
+    userId: string;
+    name: string;
+    keyPrefix: string;
+    lastUsedAt: Date | null;
+    createdAt: Date;
+    revokedAt: Date | null;
+  }): ApiKey {
+    return {
+      id: k.id,
+      orgId: k.orgId,
+      userId: k.userId,
+      name: k.name,
+      keyPrefix: k.keyPrefix,
+      lastUsedAt: k.lastUsedAt ? k.lastUsedAt.toISOString() : null,
+      createdAt: k.createdAt.toISOString(),
+      revokedAt: k.revokedAt ? k.revokedAt.toISOString() : null,
+    };
+  }
   private toSchedule(s: {
     id: string;
     projectId: string;

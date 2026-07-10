@@ -233,11 +233,14 @@ model ApiKey {
   userId     String
   name       String
   hashedKey  String       @unique
+  keyPrefix  String       @default("") // non-secret display prefix, e.g. "aegis_sk_AbC12345"
   lastUsedAt DateTime?
   createdAt  DateTime     @default(now())
   revokedAt  DateTime?
   org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user       User         @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
 }
 
 model Webhook {

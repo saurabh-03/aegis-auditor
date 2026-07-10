@@ -77,6 +77,25 @@ export interface NewUser {
   passwordHash?: string | null;
 }
 
+export interface ApiKey {
+  id: string;
+  orgId: string;
+  userId: string;
+  name: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+export interface NewApiKey {
+  orgId: string;
+  userId: string;
+  name: string;
+  hashedKey: string;
+  keyPrefix: string;
+}
+
 export type Cadence = 'daily' | 'weekly' | 'monthly';
 
 export interface Schedule {
@@ -188,4 +207,13 @@ export interface Store {
   createNotification(n: NewNotification): Promise<Notification>;
   listNotifications(orgId: string, opts: { limit: number; unreadOnly?: boolean }): Promise<Notification[]>;
   markNotificationRead(id: string): Promise<boolean>;
+
+  // API keys (only a hash is stored; plaintext is returned to the caller once)
+  createApiKey(k: NewApiKey): Promise<ApiKey>;
+  getApiKey(id: string): Promise<ApiKey | null>;
+  listApiKeys(orgId: string): Promise<ApiKey[]>;
+  /** Resolve an incoming key by its hash. Returns null if unknown. */
+  getApiKeyByHash(hashedKey: string): Promise<ApiKey | null>;
+  touchApiKey(id: string): Promise<void>;
+  revokeApiKey(id: string): Promise<boolean>;
 }

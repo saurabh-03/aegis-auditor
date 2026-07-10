@@ -10,6 +10,7 @@ import { LiveProgress } from '@/components/LiveProgress';
 import { ReportView } from '@/components/ReportView';
 import { ProjectCard } from '@/components/ProjectCard';
 import { RegressionBanner } from '@/components/RegressionBanner';
+import { ApiKeys } from '@/components/ApiKeys';
 
 export default function Dashboard() {
   const { user, orgs, loading } = useAuth();
@@ -114,6 +115,8 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {orgId && <ApiKeys orgId={orgId} />}
 
       {scanId && stream.status !== 'completed' && <LiveProgress state={stream} />}
       {report && (

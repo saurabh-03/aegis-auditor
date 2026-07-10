@@ -4,6 +4,7 @@
 
 import type {
   AdvisorOutput,
+  ApiKey,
   AppNotification,
   AuditReport,
   Cadence,
@@ -80,6 +81,11 @@ export const api = {
   notifications: (orgId: string, unreadOnly = false) =>
     req<{ notifications: AppNotification[] }>(`/api/orgs/${orgId}/notifications${unreadOnly ? '?unread=1' : ''}`),
   markNotificationRead: (id: string) => req<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: 'POST' }),
+
+  // API keys
+  apiKeys: (orgId: string) => req<{ keys: ApiKey[] }>(`/api/orgs/${orgId}/keys`),
+  createApiKey: (orgId: string, name: string) => req<{ apiKey: ApiKey; key: string }>(`/api/orgs/${orgId}/keys`, { method: 'POST', body: JSON.stringify({ name }) }),
+  revokeApiKey: (id: string) => req<unknown>(`/api/keys/${id}`, { method: 'DELETE' }),
 
   // reports & advisor
   report: (id: string) => req<AuditReport>(`/api/reports/${id}`, {}, false),

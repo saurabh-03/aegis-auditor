@@ -14,7 +14,7 @@ import { normalizeTarget } from '../core/http.js';
 import { CAN } from '../auth/rbac.js';
 import type { Queue } from '../queue/types.js';
 import type { ScanRecord, Store } from '../store/types.js';
-import { getAuth, requireAuth } from './authctx.js';
+import { getAuth, requireAuthAsync } from './authctx.js';
 
 interface EnqueueBody {
   target?: string;
@@ -33,7 +33,7 @@ async function canRead(store: Store, scan: ScanRecord, userId: string | null): P
 
 export function registerScanRoutes(app: FastifyInstance, store: Store, queue: Queue): void {
   app.post<{ Body: EnqueueBody }>('/api/scans', async (req, reply) => {
-    const auth = requireAuth(req, reply);
+    const auth = await requireAuthAsync(req, reply, store);
     if (!auth) return;
     const body = req.body ?? {};
 
@@ -98,7 +98,7 @@ export function registerScanRoutes(app: FastifyInstance, store: Store, queue: Qu
   });
 
   app.get<{ Params: { id: string } }>('/api/scans/:id', async (req, reply) => {
-    const auth = requireAuth(req, reply);
+    const auth = await requireAuthAsync(req, reply, store);
     if (!auth) return;
     const scan = await store.getScan(req.params.id);
     if (!scan) return reply.code(404).send({ error: 'not_found' });
