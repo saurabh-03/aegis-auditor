@@ -27,6 +27,10 @@ import {
   type Store,
   type Team,
   type User,
+  type Webhook,
+  type WebhookEvent,
+  type WebhookWithSecret,
+  type NewWebhook,
 } from './types.js';
 
 function slugify(name: string): string {
@@ -348,7 +352,46 @@ export class PrismaStore implements Store {
     return true;
   }
 
+  // ---- Webhooks ----
+  async createWebhook(w: NewWebhook): Promise<Webhook> {
+    const created = await this.prisma.webhook.create({
+      data: { orgId: w.orgId, url: w.url, events: w.events, secret: w.secret },
+    });
+    return this.toWebhook(created);
+  }
+
+  async getWebhook(id: string): Promise<Webhook | null> {
+    const w = await this.prisma.webhook.findUnique({ where: { id } });
+    return w ? this.toWebhook(w) : null;
+  }
+
+  async listWebhooks(orgId: string): Promise<Webhook[]> {
+    const rows = await this.prisma.webhook.findMany({ where: { orgId }, orderBy: { createdAt: 'desc' } });
+    return rows.map((w) => this.toWebhook(w));
+  }
+
+  async webhooksForEvent(orgId: string, event: WebhookEvent): Promise<WebhookWithSecret[]> {
+    const rows = await this.prisma.webhook.findMany({ where: { orgId, active: true, events: { has: event } } });
+    return rows.map((w) => ({
+      id: w.id,
+      orgId: w.orgId,
+      url: w.url,
+      events: w.events as WebhookEvent[],
+      active: w.active,
+      createdAt: w.createdAt.toISOString(),
+      secret: w.secret,
+    }));
+  }
+
+  async deleteWebhook(id: string): Promise<boolean> {
+    await this.prisma.webhook.delete({ where: { id } }).catch(() => null);
+    return true;
+  }
+
   // ---- mappers ----
+  private toWebhook(w: { id: string; orgId: string; url: string; events: string[]; active: boolean; createdAt: Date }): Webhook {
+    return { id: w.id, orgId: w.orgId, url: w.url, events: w.events as WebhookEvent[], active: w.active, createdAt: w.createdAt.toISOString() };
+  }
   private toApiKey(k: {
     id: string;
     orgId: string;

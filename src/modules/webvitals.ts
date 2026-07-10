@@ -137,6 +137,20 @@ export const webVitalsModule: ScanModule = {
       };
     }
 
+    // In a split deployment (AEGIS_ROLE=api) the browser run belongs on the
+    // worker node, not the API process. The synchronous /api/scan path runs
+    // inline in the API and defers lab metrics; async scans process on workers
+    // (AEGIS_ROLE unset or "worker") where the browser launch is appropriate.
+    if (process.env.AEGIS_ROLE === 'api') {
+      return {
+        module: MODULE,
+        category: 'performance',
+        ok: true,
+        durationMs: Math.round(performance.now() - t0),
+        findings: [pass(MODULE, 'performance', 'webvitals.deferred', 'Lab metrics run on the worker', 'This API node defers the headless-browser run to the scan worker (AEGIS_ROLE=worker); async scans include lab Core Web Vitals.')],
+      };
+    }
+
     const metrics = await measureLabMetrics(ctx.target.toString());
 
     if (!metrics) {

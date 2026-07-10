@@ -1,0 +1,47 @@
+# Aegis scan worker(s). AEGIS_ROLE=worker: pulls scan jobs from Redis, runs the
+# engine (including the headless-browser Core Web Vitals module). Scales on CPU;
+# for queue-depth scaling use KEDA with a Redis scaler (see k8s/README.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-worker
+  namespace: aegis
+  labels: { app: aegis-worker }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: aegis-worker } }
+  template:
+    metadata: { labels: { app: aegis-worker } }
+    spec:
+      containers:
+        - name: worker
+          image: aegis-auditor:latest
+          command: ["node", "dist/worker.js"]
+          env:
+            - { name: AEGIS_ROLE, value: "worker" }
+            - { name: SCAN_CONCURRENCY, value: "4" }
+          envFrom:
+            - configMapRef: { name: aegis-config }
+            - secretRef: { name: aegis-secrets }
+          resources:
+            # Higher memory ceiling: the CWV module launches headless Chromium.
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { cpu: "1", memory: "1536Mi" }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegis-worker-hpa
+  namespace: aegis
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aegis-worker
+  minReplicas: 2
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }

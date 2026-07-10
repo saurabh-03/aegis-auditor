@@ -41,6 +41,7 @@ import { registerScanRoutes } from './api/routes-scans.js';
 import { registerScaRoutes } from './api/routes-sca.js';
 import { registerScheduleRoutes } from './api/routes-schedules.js';
 import { registerKeyRoutes } from './api/routes-keys.js';
+import { registerWebhookRoutes } from './api/routes-webhooks.js';
 import { Scheduler } from './schedule/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,7 @@ export async function buildServer() {
   registerScaRoutes(app);
   registerScheduleRoutes(app, store);
   registerKeyRoutes(app, store);
+  registerWebhookRoutes(app, store);
 
   // Recurring-scan scheduler runs on the API node (not worker-only processes).
   if (config.scheduler.enabled && process.env.AEGIS_ROLE !== 'worker') {

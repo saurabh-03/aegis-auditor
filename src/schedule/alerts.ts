@@ -7,6 +7,7 @@
  * into the scan pipeline.
  */
 
+import { createHmac } from 'node:crypto';
 import { assessRegression, diffReports } from '../core/diff.js';
 import type { AuditReport } from '../core/types.js';
 import type { Store } from '../store/types.js';
@@ -41,8 +42,6 @@ export async function handleScanCompletion(store: Store, job: CompletedJob, repo
     severity: assessment.level === 'major' ? 'critical' : 'warning',
   });
 
-  // Fire webhooks configured on this project's schedules.
-  const schedules = await store.listSchedules({ projectId: job.projectId });
   const payload = {
     event: 'regression' as const,
     level: assessment.level,
@@ -56,21 +55,25 @@ export async function handleScanCompletion(store: Store, job: CompletedJob, repo
     reasons: assessment.reasons,
     at: new Date().toISOString(),
   };
-  await Promise.all(
-    schedules.filter((s) => s.webhookUrl).map((s) => fireWebhook(s.webhookUrl as string, payload)),
-  );
+
+  // Per-schedule webhooks (legacy, unsigned) + org-level webhooks (HMAC-signed).
+  const schedules = await store.listSchedules({ projectId: job.projectId });
+  const orgHooks = await store.webhooksForEvent(job.orgId, 'regression');
+  await Promise.all([
+    ...schedules.filter((s) => s.webhookUrl).map((s) => fireWebhook(s.webhookUrl as string, payload)),
+    ...orgHooks.map((h) => fireWebhook(h.url, payload, h.secret)),
+  ]);
 }
 
-async function fireWebhook(url: string, payload: unknown): Promise<void> {
+/** POST the payload; when a secret is given, add an HMAC-SHA256 signature header. */
+export async function fireWebhook(url: string, payload: unknown, secret?: string): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
+  const body = JSON.stringify(payload);
+  const headers: Record<string, string> = { 'content-type': 'application/json', 'user-agent': 'AegisAuditor/webhook' };
+  if (secret) headers['x-aegis-signature'] = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
   try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'user-agent': 'AegisAuditor/webhook' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+    await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
   } catch {
     /* best-effort */
   } finally {

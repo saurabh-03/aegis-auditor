@@ -94,6 +94,16 @@ export interface ApiKey {
   revokedAt: string | null;
 }
 
+export type WebhookEvent = 'regression' | 'scan_complete';
+export interface Webhook {
+  id: string;
+  orgId: string;
+  url: string;
+  events: WebhookEvent[];
+  active: boolean;
+  createdAt: string;
+}
+
 export type Cadence = 'daily' | 'weekly' | 'monthly';
 
 export interface Schedule {

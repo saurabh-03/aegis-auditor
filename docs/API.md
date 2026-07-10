@@ -180,6 +180,22 @@ a notification and fires any webhook configured on the project's schedules. `reg
 { "isRegression": true, "level": "major", "reasons": ["1 new high/critical issue: No CSP", "Score dropped 18 (90 → 72)"] }
 ```
 
+### API keys & webhooks (authenticated, ADMIN+)
+```
+POST   /api/orgs/:orgId/keys        { name }          → { apiKey, key }   (plaintext once)
+GET    /api/orgs/:orgId/keys
+DELETE /api/keys/:id
+
+POST   /api/orgs/:orgId/webhooks    { url, events }   → { webhook, secret } (secret once)
+GET    /api/orgs/:orgId/webhooks
+DELETE /api/webhooks/:id
+POST   /api/webhooks/:id/test       send a signed test ping
+```
+API keys authenticate requests via `X-Api-Key` (e.g. `POST /api/scans` from CI). Webhook
+deliveries are POSTed with `x-aegis-signature: sha256=<hmac>` (HMAC-SHA256 of the raw body with
+the signing secret) for the receiver to verify. Webhook URLs must be `https://` (http allowed for
+localhost only).
+
 ## Planned endpoints (target state)
 
 ```

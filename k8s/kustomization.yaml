@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: aegis
+resources:
+  - config.yaml
+  - data.yaml
+  - api.yaml
+  - worker.yaml
+# Pin the image tag at deploy time, e.g.:
+#   kustomize edit set image aegis-auditor=ghcr.io/you/aegis-auditor:<sha>
+images:
+  - name: aegis-auditor
+    newName: aegis-auditor
+    newTag: latest

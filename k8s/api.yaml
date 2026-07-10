@@ -1,0 +1,79 @@
+# Aegis API (enqueues scans; serves REST + dashboard). AEGIS_ROLE=api so it does
+# not process scans itself — the worker does. Runs DB migrations via an initContainer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-api
+  namespace: aegis
+  labels: { app: aegis-api }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: aegis-api } }
+  template:
+    metadata: { labels: { app: aegis-api } }
+    spec:
+      initContainers:
+        # Applies pending Prisma migrations before the API starts. Requires an
+        # image that includes the prisma CLI (build target with dev deps), or
+        # replace with your migration image.
+        - name: migrate
+          image: aegis-auditor:latest
+          command: ["npx", "prisma", "migrate", "deploy"]
+          envFrom:
+            - configMapRef: { name: aegis-config }
+            - secretRef: { name: aegis-secrets }
+      containers:
+        - name: api
+          image: aegis-auditor:latest
+          command: ["node", "dist/server.js"]
+          ports: [{ containerPort: 4000 }]
+          env:
+            - { name: AEGIS_ROLE, value: "api" }
+          envFrom:
+            - configMapRef: { name: aegis-config }
+            - secretRef: { name: aegis-secrets }
+          readinessProbe:
+            httpGet: { path: /health, port: 4000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 4000 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "100m", memory: "192Mi" }
+            limits: { cpu: "500m", memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-api
+  namespace: aegis
+spec:
+  selector: { app: aegis-api }
+  ports: [{ port: 80, targetPort: 4000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aegis-ingress
+  namespace: aegis
+  annotations:
+    # WebSocket support for /api/scans/:id/stream (nginx-ingress example).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["aegis.example.com"]
+      secretName: aegis-tls
+  rules:
+    - host: aegis.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aegis-api
+                port: { number: 80 }

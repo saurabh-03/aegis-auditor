@@ -96,6 +96,30 @@ export interface NewApiKey {
   keyPrefix: string;
 }
 
+export type WebhookEvent = 'regression' | 'scan_complete';
+
+/** Public webhook shape (secret never included). */
+export interface Webhook {
+  id: string;
+  orgId: string;
+  url: string;
+  events: WebhookEvent[];
+  active: boolean;
+  createdAt: string;
+}
+
+export interface NewWebhook {
+  orgId: string;
+  url: string;
+  events: WebhookEvent[];
+  secret: string;
+}
+
+/** Internal shape including the signing secret (for delivery only). */
+export interface WebhookWithSecret extends Webhook {
+  secret: string;
+}
+
 export type Cadence = 'daily' | 'weekly' | 'monthly';
 
 export interface Schedule {
@@ -216,4 +240,12 @@ export interface Store {
   getApiKeyByHash(hashedKey: string): Promise<ApiKey | null>;
   touchApiKey(id: string): Promise<void>;
   revokeApiKey(id: string): Promise<boolean>;
+
+  // Webhooks (org-level, HMAC-signed delivery)
+  createWebhook(w: NewWebhook): Promise<Webhook>;
+  getWebhook(id: string): Promise<Webhook | null>;
+  listWebhooks(orgId: string): Promise<Webhook[]>;
+  /** Active webhooks (with secret) for an org subscribed to `event`. Internal use. */
+  webhooksForEvent(orgId: string, event: WebhookEvent): Promise<WebhookWithSecret[]>;
+  deleteWebhook(id: string): Promise<boolean>;
 }

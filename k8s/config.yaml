@@ -1,0 +1,42 @@
+# Namespace, non-secret config, and a secret TEMPLATE for Aegis Auditor.
+# Copy the Secret below into a real secret manager (sealed-secrets / external-secrets)
+# — do NOT commit real values.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aegis
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aegis-config
+  namespace: aegis
+data:
+  HOST: "0.0.0.0"
+  PORT: "4000"
+  LOG_LEVEL: "info"
+  SCAN_TIMEOUT_MS: "12000"
+  RATE_LIMIT_MAX: "60"
+  CVE_SOURCE: "both"
+  SCHEDULER_ENABLED: "on"
+  # Browser metrics: enable only on the worker (has Chromium); API defers.
+  BROWSER_METRICS: "auto"
+  DATABASE_URL: "postgresql://aegis:$(POSTGRES_PASSWORD)@aegis-postgres:5432/aegis?schema=public"
+  REDIS_URL: "redis://aegis-redis:6379"
+---
+# TEMPLATE ONLY — replace with managed secrets. Values shown are placeholders.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aegis-secrets
+  namespace: aegis
+type: Opaque
+stringData:
+  JWT_SECRET: "replace-me-with-a-long-random-string"
+  POSTGRES_PASSWORD: "replace-me"
+  # Optional integrations:
+  ANTHROPIC_API_KEY: ""
+  GOOGLE_CLIENT_ID: ""
+  GOOGLE_CLIENT_SECRET: ""
+  GITHUB_CLIENT_ID: ""
+  GITHUB_CLIENT_SECRET: ""

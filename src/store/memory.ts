@@ -19,6 +19,10 @@ import {
   type Store,
   type Team,
   type User,
+  type Webhook,
+  type WebhookEvent,
+  type WebhookWithSecret,
+  type NewWebhook,
 } from './types.js';
 
 function slugify(name: string): string {
@@ -39,6 +43,7 @@ export class MemoryStore implements Store {
   private schedules = new Map<string, Schedule>();
   private notifications = new Map<string, Notification>();
   private apiKeys = new Map<string, ApiKey & { hashedKey: string }>();
+  private webhooks = new Map<string, WebhookWithSecret>();
   private orgSlugs = new Set<string>();
 
   async init(): Promise<void> {}
@@ -321,5 +326,43 @@ export class MemoryStore implements Store {
     if (!k) return false;
     k.revokedAt = new Date().toISOString();
     return true;
+  }
+
+  // ---- Webhooks ----
+  private toWebhook(w: WebhookWithSecret): Webhook {
+    const { secret, ...pub } = w;
+    void secret;
+    return pub;
+  }
+
+  async createWebhook(w: NewWebhook): Promise<Webhook> {
+    const rec: WebhookWithSecret = {
+      id: randomUUID(),
+      orgId: w.orgId,
+      url: w.url,
+      events: w.events,
+      secret: w.secret,
+      active: true,
+      createdAt: new Date().toISOString(),
+    };
+    this.webhooks.set(rec.id, rec);
+    return this.toWebhook(rec);
+  }
+
+  async getWebhook(id: string): Promise<Webhook | null> {
+    const w = this.webhooks.get(id);
+    return w ? this.toWebhook(w) : null;
+  }
+
+  async listWebhooks(orgId: string): Promise<Webhook[]> {
+    return [...this.webhooks.values()].filter((w) => w.orgId === orgId).map((w) => this.toWebhook(w));
+  }
+
+  async webhooksForEvent(orgId: string, event: WebhookEvent): Promise<WebhookWithSecret[]> {
+    return [...this.webhooks.values()].filter((w) => w.orgId === orgId && w.active && w.events.includes(event));
+  }
+
+  async deleteWebhook(id: string): Promise<boolean> {
+    return this.webhooks.delete(id);
   }
 }

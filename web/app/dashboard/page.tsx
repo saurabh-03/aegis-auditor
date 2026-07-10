@@ -11,6 +11,7 @@ import { ReportView } from '@/components/ReportView';
 import { ProjectCard } from '@/components/ProjectCard';
 import { RegressionBanner } from '@/components/RegressionBanner';
 import { ApiKeys } from '@/components/ApiKeys';
+import { Webhooks } from '@/components/Webhooks';
 
 export default function Dashboard() {
   const { user, orgs, loading } = useAuth();
@@ -116,7 +117,12 @@ export default function Dashboard() {
         )}
       </section>
 
-      {orgId && <ApiKeys orgId={orgId} />}
+      {orgId && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <ApiKeys orgId={orgId} />
+          <Webhooks orgId={orgId} />
+        </div>
+      )}
 
       {scanId && stream.status !== 'completed' && <LiveProgress state={stream} />}
       {report && (

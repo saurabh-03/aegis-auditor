@@ -14,6 +14,8 @@ import type {
   ReportDiff,
   Schedule,
   User,
+  Webhook,
+  WebhookEvent,
 } from './types';
 
 const TOKEN_KEY = 'aegis_token';
@@ -86,6 +88,13 @@ export const api = {
   apiKeys: (orgId: string) => req<{ keys: ApiKey[] }>(`/api/orgs/${orgId}/keys`),
   createApiKey: (orgId: string, name: string) => req<{ apiKey: ApiKey; key: string }>(`/api/orgs/${orgId}/keys`, { method: 'POST', body: JSON.stringify({ name }) }),
   revokeApiKey: (id: string) => req<unknown>(`/api/keys/${id}`, { method: 'DELETE' }),
+
+  // Webhooks
+  webhooks: (orgId: string) => req<{ webhooks: Webhook[] }>(`/api/orgs/${orgId}/webhooks`),
+  createWebhook: (orgId: string, url: string, events: WebhookEvent[]) =>
+    req<{ webhook: Webhook; secret: string }>(`/api/orgs/${orgId}/webhooks`, { method: 'POST', body: JSON.stringify({ url, events }) }),
+  deleteWebhook: (id: string) => req<unknown>(`/api/webhooks/${id}`, { method: 'DELETE' }),
+  testWebhook: (id: string) => req<{ ok: boolean; delivered: string }>(`/api/webhooks/${id}/test`, { method: 'POST' }),
 
   // reports & advisor
   report: (id: string) => req<AuditReport>(`/api/reports/${id}`, {}, false),

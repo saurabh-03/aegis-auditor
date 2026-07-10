@@ -6,6 +6,7 @@ import { CategoryCards } from './CategoryCards';
 import { FindingList } from './FindingList';
 import { AdvisorPanel } from './AdvisorPanel';
 import { Inspectors } from './Inspectors';
+import { Explorers } from './Explorers';
 import { ReportExports } from './ReportExports';
 
 function summary(report: AuditReport) {
@@ -74,6 +75,8 @@ export function ReportView({ report, reportId }: { report: AuditReport; reportId
       )}
 
       <Inspectors report={report} />
+
+      <Explorers report={report} />
 
       <div>
         <div className="mb-3 text-sm font-semibold">Issue Explorer</div>
