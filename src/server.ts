@@ -29,6 +29,8 @@ import type { ScanOptions } from './core/types.js';
 import { ALL_MODULES, moduleCatalog } from './modules/registry.js';
 import { toMarkdown } from './report/markdown.js';
 import { toCsv } from './report/csv.js';
+import { renderHtmlReport, PERSONAS, type Persona } from './report/html.js';
+import { renderPdf, PdfUnavailableError } from './report/pdf.js';
 import { getAdvisor, generateTickets } from './ai/index.js';
 import { rateLimit } from './api/ratelimit.js';
 import { getStore } from './store/index.js';
@@ -145,6 +147,32 @@ export async function buildServer() {
     reply.header('content-type', 'text/csv; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="aegis-${req.params.id}.csv"`);
     return toCsv(rec.report);
+  });
+
+  // Persona HTML report (executive | security | compliance | developer).
+  app.get<{ Params: { id: string }; Querystring: { persona?: string } }>('/api/reports/:id/report.html', async (req, reply) => {
+    const rec = await store.getScan(req.params.id);
+    if (!rec || !rec.report) return reply.code(404).send({ error: 'not_found' });
+    const persona = (PERSONAS as string[]).includes(req.query.persona ?? '') ? (req.query.persona as Persona) : 'executive';
+    reply.header('content-type', 'text/html; charset=utf-8');
+    return renderHtmlReport(rec.report, persona);
+  });
+
+  // Persona PDF report (requires Puppeteer; 501 with guidance when unavailable).
+  app.get<{ Params: { id: string }; Querystring: { persona?: string } }>('/api/reports/:id/report.pdf', async (req, reply) => {
+    const rec = await store.getScan(req.params.id);
+    if (!rec || !rec.report) return reply.code(404).send({ error: 'not_found' });
+    const persona = (PERSONAS as string[]).includes(req.query.persona ?? '') ? (req.query.persona as Persona) : 'executive';
+    try {
+      const pdf = await renderPdf(renderHtmlReport(rec.report, persona));
+      reply.header('content-type', 'application/pdf');
+      reply.header('content-disposition', `attachment; filename="aegis-${persona}-${req.params.id}.pdf"`);
+      return reply.send(pdf);
+    } catch (err) {
+      if (err instanceof PdfUnavailableError) return reply.code(501).send({ error: 'pdf_unavailable', message: err.message });
+      req.log.error(err);
+      return reply.code(500).send({ error: 'pdf_failed' });
+    }
   });
 
   // AI Security Advisor: executive summary, prioritized actions, checklist, grouping.

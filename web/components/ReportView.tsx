@@ -6,6 +6,7 @@ import { CategoryCards } from './CategoryCards';
 import { FindingList } from './FindingList';
 import { AdvisorPanel } from './AdvisorPanel';
 import { Inspectors } from './Inspectors';
+import { ReportExports } from './ReportExports';
 
 function summary(report: AuditReport) {
   const c = { critical: 0, high: 0, medium: 0, low: 0, passed: 0 };
@@ -54,6 +55,7 @@ export function ReportView({ report, reportId }: { report: AuditReport; reportId
       {reportId && (
         <>
           <AdvisorPanel reportId={reportId} />
+          <ReportExports reportId={reportId} />
           <div className="flex flex-wrap gap-2">
             <a className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-dim hover:text-ink" href={`/api/reports/${reportId}/report.md`} target="_blank" rel="noopener">
               ⬇ Markdown

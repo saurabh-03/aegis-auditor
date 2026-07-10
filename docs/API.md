@@ -58,6 +58,14 @@ Markdown export (`text/markdown`).
 ### `GET /api/reports/:id/report.csv`
 CSV export (`text/csv`, attachment) — one row per finding.
 
+### `GET /api/reports/:id/report.html?persona=`
+Branded, print-optimized HTML report. `persona` ∈ `executive | security | compliance | developer`
+(default `executive`) tailors the content to the audience.
+
+### `GET /api/reports/:id/report.pdf?persona=`
+Same report rendered to PDF (`application/pdf`, attachment). Requires Puppeteer
+(`npm run enable:browser`); returns `501 pdf_unavailable` with guidance if it isn't installed.
+
 ### `GET /api/reports/:id/advisor`
 AI Security Advisor output: `{ provider, model?, executiveSummary, prioritizedActions[],
 remediationChecklist[], groups[] }`. Uses Claude when `ANTHROPIC_API_KEY` is set, else the
