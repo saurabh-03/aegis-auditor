@@ -2,7 +2,18 @@
 
 'use client';
 
-import type { AdvisorOutput, AuditReport, Organization, Project, User } from './types';
+import type {
+  AdvisorOutput,
+  AppNotification,
+  AuditReport,
+  Cadence,
+  Organization,
+  Project,
+  RegressionAssessment,
+  ReportDiff,
+  Schedule,
+  User,
+} from './types';
 
 const TOKEN_KEY = 'aegis_token';
 
@@ -56,6 +67,19 @@ export const api = {
   enqueueScan: (body: { target?: string; projectId?: string; includeActive?: boolean }) =>
     req<{ scanId: string; status: string; stream: string }>('/api/scans', { method: 'POST', body: JSON.stringify(body) }),
   scanStatus: (id: string) => req<{ status: string; report: AuditReport | null; overall: number | null; grade: string | null }>(`/api/scans/${id}`),
+
+  // monitoring: schedules, diffs, notifications
+  schedules: (projectId: string) => req<{ schedules: Schedule[] }>(`/api/projects/${projectId}/schedules`),
+  createSchedule: (projectId: string, body: { cadence: Cadence; includeActive?: boolean; webhookUrl?: string | null }) =>
+    req<Schedule>(`/api/projects/${projectId}/schedules`, { method: 'POST', body: JSON.stringify(body) }),
+  updateSchedule: (id: string, body: { cadence?: Cadence; enabled?: boolean; includeActive?: boolean; webhookUrl?: string | null }) =>
+    req<Schedule>(`/api/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteSchedule: (id: string) => req<unknown>(`/api/schedules/${id}`, { method: 'DELETE' }),
+  scanDiff: (id: string) =>
+    req<{ diff: ReportDiff | null; regression: RegressionAssessment; baselineScanId: string | null }>(`/api/scans/${id}/diff`),
+  notifications: (orgId: string, unreadOnly = false) =>
+    req<{ notifications: AppNotification[] }>(`/api/orgs/${orgId}/notifications${unreadOnly ? '?unread=1' : ''}`),
+  markNotificationRead: (id: string) => req<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: 'POST' }),
 
   // reports & advisor
   report: (id: string) => req<AuditReport>(`/api/reports/${id}`, {}, false),

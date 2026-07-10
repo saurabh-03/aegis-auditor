@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import { NotificationsBell } from './NotificationsBell';
 
 export function NavBar() {
   const { user, logout, loading } = useAuth();
@@ -25,6 +26,7 @@ export function NavBar() {
               </Link>
               <span className="text-mute">·</span>
               <span className="text-dim">{user.name ?? user.email}</span>
+              <NotificationsBell />
               <button onClick={logout} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-dim hover:text-ink">
                 Log out
               </button>

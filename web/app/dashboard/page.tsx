@@ -9,6 +9,7 @@ import { useScanStream } from '@/lib/useScanStream';
 import { LiveProgress } from '@/components/LiveProgress';
 import { ReportView } from '@/components/ReportView';
 import { ProjectCard } from '@/components/ProjectCard';
+import { RegressionBanner } from '@/components/RegressionBanner';
 
 export default function Dashboard() {
   const { user, orgs, loading } = useAuth();
@@ -116,8 +117,9 @@ export default function Dashboard() {
 
       {scanId && stream.status !== 'completed' && <LiveProgress state={stream} />}
       {report && (
-        <section>
-          <div className="mb-3 text-sm font-semibold">Latest scan</div>
+        <section className="space-y-3">
+          <div className="text-sm font-semibold">Latest scan</div>
+          {scanId && <RegressionBanner scanId={scanId} />}
           <ReportView report={report} reportId={scanId ?? undefined} />
         </section>
       )}

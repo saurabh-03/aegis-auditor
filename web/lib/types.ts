@@ -83,6 +83,58 @@ export interface AdvisorOutput {
   groups: { theme: string; findingIds: string[]; count: number }[];
 }
 
+export type Cadence = 'daily' | 'weekly' | 'monthly';
+
+export interface Schedule {
+  id: string;
+  projectId: string;
+  orgId: string;
+  cadence: Cadence;
+  includeActive: boolean;
+  enabled: boolean;
+  webhookUrl: string | null;
+  nextRunAt: string;
+  lastRunAt: string | null;
+  createdAt: string;
+}
+
+export interface AppNotification {
+  id: string;
+  orgId: string;
+  type: 'regression' | 'scan_complete';
+  scanId: string | null;
+  projectId: string | null;
+  title: string;
+  body: string;
+  severity: 'info' | 'warning' | 'critical';
+  read: boolean;
+  createdAt: string;
+}
+
+export interface FindingDelta {
+  id: string;
+  title: string;
+  severity: Severity;
+  category: Category;
+}
+
+export interface ReportDiff {
+  prevScore: number;
+  currScore: number;
+  scoreDelta: number;
+  prevGrade: string;
+  currGrade: string;
+  newFindings: FindingDelta[];
+  resolvedFindings: FindingDelta[];
+  categoryDeltas: { category: Category; prev: number; curr: number; delta: number }[];
+}
+
+export interface RegressionAssessment {
+  isRegression: boolean;
+  level: 'none' | 'minor' | 'major';
+  reasons: string[];
+}
+
 export interface ProgressEvent {
   scanId: string;
   type: 'queued' | 'running' | 'module' | 'completed' | 'failed';

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import type { Project } from '@/lib/types';
+import { ScheduleControls } from './ScheduleControls';
 
 export function ProjectCard({
   project,
@@ -59,6 +60,7 @@ export function ProjectCard({
         )}
       </div>
       {msg && <p className="mt-2 text-xs text-mute">{msg}</p>}
+      <ScheduleControls projectId={project.id} verified={verified} />
     </div>
   );
 }
