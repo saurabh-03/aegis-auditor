@@ -15,7 +15,8 @@ Legend: ✅ implemented · 🔒 implemented but authorization-gated · 📐 desi
 | 5 | Technology Detection | `tech.ts` | infrastructure | passive | ✅ |
 | 6 | Port Scanner | `active/ports.ts` | infrastructure | active | 🔒 |
 | 7 | HTTP Analysis | `http.ts` | performance | passive | ✅ |
-| 8 | Performance Analysis | `performance.ts` | performance | passive | ✅* |
+| 8 | Performance Analysis (HTML heuristics) | `performance.ts` | performance | passive | ✅ |
+| 8b | Core Web Vitals (lab, headless browser) | `webvitals.ts` | performance | passive | ✅† |
 | 9 | Image Optimization | `images.ts` | performance | passive | ✅ |
 | 10 | JavaScript Security (secrets) | `jssecurity.ts` | security | passive | ✅ |
 | 11 | Robots Analysis | `crawl.ts` | seo | passive | ✅ |
@@ -33,8 +34,11 @@ Legend: ✅ implemented · 🔒 implemented but authorization-gated · 📐 desi
 | 23 | Accessibility | `seo.ts` (a11y signals) | accessibility | passive | ✅ |
 | 24 | AI Security Advisor | `ai/` (local + Claude) | — | — | ✅ |
 
-`✅*` Performance module computes real passive signals (render-blocking, weight, TTFB, resource
-counts); lab Core Web Vitals (LCP/CLS/INP) still require the headless-Chrome worker.
+`✅†` Lab Core Web Vitals are implemented in `webvitals.ts` via **optional** Puppeteer
+(`npm run enable:browser`). It measures real LCP / CLS / FCP and TBT (the lab proxy for INP,
+since true INP needs simulated interaction) plus a per-resource waterfall. Without Puppeteer the
+module degrades to an info finding; the passive `performance.ts` heuristics always run. Controlled
+by `BROWSER_METRICS` / `BROWSER_FORM_FACTOR` / `BROWSER_TIMEOUT_MS`.
 
 ## Notes on specific modules
 

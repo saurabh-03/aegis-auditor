@@ -16,6 +16,7 @@ import { scalabilityModule } from './scalability.js';
 import { seoModule } from './seo.js';
 import { sslModule } from './ssl.js';
 import { techModule } from './tech.js';
+import { webVitalsModule } from './webvitals.js';
 import { portsModule } from './active/ports.js';
 import { exposureModule } from './active/exposure.js';
 
@@ -31,6 +32,7 @@ export const ALL_MODULES: ScanModule[] = [
   dependenciesModule,
   httpModule,
   performanceModule,
+  webVitalsModule,
   imagesModule,
   jsSecurityModule,
   crawlModule,

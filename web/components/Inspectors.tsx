@@ -277,26 +277,116 @@ function TechPanel({ report }: { report: AuditReport }) {
   );
 }
 
+/* ---------------- Core Web Vitals (lab) ---------------- */
+function vBand(value: number, good: number, poor: number): string {
+  return value < good ? 'var(--green)' : value < poor ? 'var(--yellow)' : 'var(--red)';
+}
+function WebVitalsPanel({ report }: { report: AuditReport }) {
+  const d = get(report, 'webvitals');
+  if (!d || d['lcp'] == null) return null; // only render when a browser run produced metrics
+  const lcp = Number(d['lcp']);
+  const cls = Number(d['cls']);
+  const tbt = Number(d['tbt']);
+  const fcp = Number(d['fcp']);
+  const ttfb = Number(d['ttfb']);
+
+  const tiles: { label: string; value: string; color: string }[] = [
+    { label: 'LCP', value: `${(lcp / 1000).toFixed(2)}s`, color: vBand(lcp, 2500, 4000) },
+    { label: 'CLS', value: cls.toFixed(3), color: vBand(cls, 0.1, 0.25) },
+    { label: 'TBT', value: `${tbt}ms`, color: vBand(tbt, 200, 600) },
+    { label: 'FCP', value: `${(fcp / 1000).toFixed(2)}s`, color: vBand(fcp, 1800, 3000) },
+    { label: 'TTFB', value: `${ttfb}ms`, color: vBand(ttfb, 800, 1800) },
+  ];
+
+  return (
+    <div className="card overflow-hidden">
+      <PanelHead title="Core Web Vitals (lab)" tag={`${str(d['formFactor']) || 'desktop'} · headless`} />
+      <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-lg border border-[var(--border)] bg-elev2 p-3 text-center">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-mute">{t.label}</div>
+            <div className="mt-1 font-mono text-lg font-bold tabular-nums" style={{ color: t.color }}>{t.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Resource waterfall (real timings) ---------------- */
+interface Res {
+  name: string;
+  type: string;
+  start: number;
+  duration: number;
+  size: number;
+}
+const RES_COLOR: Record<string, string> = {
+  navigation: 'var(--accent)',
+  link: 'var(--green)',
+  css: 'var(--green)',
+  script: 'var(--yellow)',
+  img: 'var(--orange)',
+  fetch: 'var(--accent-2)',
+  xmlhttprequest: 'var(--accent-2)',
+};
+function shortName(url: string): string {
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split('/').filter(Boolean).pop() || u.hostname;
+    return last.length > 28 ? last.slice(0, 27) + '…' : last;
+  } catch {
+    return url.slice(0, 28);
+  }
+}
+function WaterfallPanel({ report }: { report: AuditReport }) {
+  const d = get(report, 'webvitals');
+  const resources = (d?.['resources'] as Res[]) || [];
+  if (!resources.length) return null;
+  const rows = resources.slice(0, 30);
+  const maxEnd = Math.max(...rows.map((r) => r.start + r.duration), 1);
+
+  return (
+    <div className="card overflow-hidden">
+      <PanelHead title="Resource waterfall" tag={`${resources.length} requests`} />
+      <div className="flex flex-col gap-1.5 p-4">
+        {rows.map((r, i) => (
+          <div key={i} className="grid grid-cols-[150px_1fr_54px] items-center gap-2.5 font-mono text-[11px]">
+            <span className="truncate text-dim" title={r.name}>{shortName(r.name)}</span>
+            <span className="relative h-3 rounded border border-[var(--border)] bg-elev2">
+              <span
+                className="absolute bottom-px top-px rounded-sm"
+                style={{
+                  left: `${(r.start / maxEnd) * 100}%`,
+                  width: `${Math.max(0.5, (r.duration / maxEnd) * 100)}%`,
+                  background: RES_COLOR[r.type] || 'var(--text-mute)',
+                }}
+              />
+            </span>
+            <span className="text-right text-mute">{r.duration}ms</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- wrapper ---------------- */
 export function Inspectors({ report }: { report: AuditReport }) {
-  const panels = [
-    <CertPanel key="ssl" report={report} />,
-    <HeadersPanel key="hdr" report={report} />,
-    <CvePanel key="cve" report={report} />,
-    <TechPanel key="tech" report={report} />,
-  ];
   // If no per-module data was returned at all, render nothing.
   if (!report.data) return null;
 
   return (
     <div className="space-y-4">
       <div className="text-sm font-semibold">Inspectors</div>
+      <WebVitalsPanel report={report} />
       <div className="grid gap-4 md:grid-cols-2">
-        {panels[0]}
-        {panels[1]}
+        <CertPanel report={report} />
+        <HeadersPanel report={report} />
       </div>
-      {panels[2]}
-      {panels[3]}
+      <CvePanel report={report} />
+      <WaterfallPanel report={report} />
+      <TechPanel report={report} />
     </div>
   );
 }

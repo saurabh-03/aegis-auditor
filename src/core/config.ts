@@ -18,11 +18,27 @@ export interface AppConfig {
     /** Per-package OSV request timeout. */
     timeoutMs: number;
   };
+  /** Headless-browser lab metrics (Core Web Vitals + resource waterfall). */
+  browser: {
+    /** When false, the web-vitals module is skipped entirely. */
+    enabled: boolean;
+    /** Page-load timeout for the browser run. */
+    timeoutMs: number;
+    /** 'mobile' | 'desktop' form factor for the emulated viewport. */
+    formFactor: 'mobile' | 'desktop';
+  };
 }
 
 function cveSource(): AppConfig['cve']['source'] {
   const v = (process.env.CVE_SOURCE ?? 'both').toLowerCase();
   return v === 'local' || v === 'osv' || v === 'both' ? v : 'both';
+}
+
+/** Browser metrics are attempted unless explicitly disabled. If Puppeteer is not
+ *  installed the module degrades to an info finding — so 'auto' is safe. */
+function browserEnabled(): boolean {
+  const v = (process.env.BROWSER_METRICS ?? 'auto').toLowerCase();
+  return !(v === 'off' || v === 'false' || v === '0' || v === 'no');
 }
 
 function int(name: string, fallback: number): number {
@@ -46,5 +62,10 @@ export const config: AppConfig = {
   cve: {
     source: cveSource(),
     timeoutMs: int('CVE_TIMEOUT_MS', 6_000),
+  },
+  browser: {
+    enabled: browserEnabled(),
+    timeoutMs: int('BROWSER_TIMEOUT_MS', 30_000),
+    formFactor: (process.env.BROWSER_FORM_FACTOR ?? 'desktop') === 'mobile' ? 'mobile' : 'desktop',
   },
 };

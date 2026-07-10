@@ -7,9 +7,11 @@
  * (LCP/CLS/INP) require the headless-Chrome worker (see docs/MODULES.md); those
  * fields are surfaced there. This module focuses on what can be proven passively.
  *
- * TODO(aegis:cwv): add a headless-Chrome worker module (own package, own queue)
- * that produces real lab Core Web Vitals and a per-resource waterfall, then emit
- * that data for the (currently deliberately absent) waterfall inspector panel.
+ * NOTE(aegis:cwv): lab Core Web Vitals + the resource waterfall are now produced
+ * by the `webvitals` module (src/modules/webvitals.ts) via optional Puppeteer.
+ * TODO(aegis:cwv): move that browser run into a dedicated worker/queue so it
+ * scales independently, and add real INP via simulated interactions (currently
+ * TBT is used as the lab interactivity proxy).
  */
 
 import { finding, pass } from '../core/finding.js';
