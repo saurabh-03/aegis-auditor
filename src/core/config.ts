@@ -27,6 +27,12 @@ export interface AppConfig {
     /** 'mobile' | 'desktop' form factor for the emulated viewport. */
     formFactor: 'mobile' | 'desktop';
   };
+  /** Recurring-scan scheduler. */
+  scheduler: {
+    enabled: boolean;
+    /** How often to poll for due schedules. */
+    intervalMs: number;
+  };
 }
 
 function cveSource(): AppConfig['cve']['source'] {
@@ -67,5 +73,9 @@ export const config: AppConfig = {
     enabled: browserEnabled(),
     timeoutMs: int('BROWSER_TIMEOUT_MS', 30_000),
     formFactor: (process.env.BROWSER_FORM_FACTOR ?? 'desktop') === 'mobile' ? 'mobile' : 'desktop',
+  },
+  scheduler: {
+    enabled: !['off', 'false', '0', 'no'].includes((process.env.SCHEDULER_ENABLED ?? 'on').toLowerCase()),
+    intervalMs: int('SCHEDULER_INTERVAL_MS', 60_000),
   },
 };

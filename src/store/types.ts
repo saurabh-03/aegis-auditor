@@ -77,6 +77,64 @@ export interface NewUser {
   passwordHash?: string | null;
 }
 
+export type Cadence = 'daily' | 'weekly' | 'monthly';
+
+export interface Schedule {
+  id: string;
+  projectId: string;
+  orgId: string;
+  cadence: Cadence;
+  includeActive: boolean;
+  enabled: boolean;
+  /** Optional outbound webhook fired on regression. */
+  webhookUrl: string | null;
+  nextRunAt: string;
+  lastRunAt: string | null;
+  createdAt: string;
+}
+
+export interface NewSchedule {
+  projectId: string;
+  orgId: string;
+  cadence: Cadence;
+  includeActive?: boolean;
+  webhookUrl?: string | null;
+}
+
+export type NotificationType = 'regression' | 'scan_complete';
+
+export interface Notification {
+  id: string;
+  orgId: string;
+  type: NotificationType;
+  scanId: string | null;
+  projectId: string | null;
+  title: string;
+  body: string;
+  severity: 'info' | 'warning' | 'critical';
+  read: boolean;
+  createdAt: string;
+}
+
+export interface NewNotification {
+  orgId: string;
+  type: NotificationType;
+  scanId?: string | null;
+  projectId?: string | null;
+  title: string;
+  body: string;
+  severity: 'info' | 'warning' | 'critical';
+}
+
+/** Compute the next run time for a cadence, from a base instant. */
+export function nextRunFrom(cadence: Cadence, from = new Date()): string {
+  const d = new Date(from);
+  if (cadence === 'daily') d.setUTCDate(d.getUTCDate() + 1);
+  else if (cadence === 'weekly') d.setUTCDate(d.getUTCDate() + 7);
+  else d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.toISOString();
+}
+
 /** The contract every backing store implements. */
 export interface Store {
   readonly kind: 'memory' | 'prisma';
@@ -114,4 +172,20 @@ export interface Store {
   getScan(id: string): Promise<ScanRecord | null>;
   listScans(opts: { orgId?: string; projectId?: string; limit: number; offset: number }): Promise<{ total: number; items: ScanRecord[] }>;
   scanHistoryForTarget(target: string, orgId?: string): Promise<Array<{ id: string; createdAt: string; score: number }>>;
+  /** Most recent COMPLETED scan for a project, excluding `excludeScanId`. For regression baselines. */
+  previousScanForProject(projectId: string, excludeScanId: string): Promise<ScanRecord | null>;
+
+  // Schedules
+  createSchedule(s: NewSchedule): Promise<Schedule>;
+  getSchedule(id: string): Promise<Schedule | null>;
+  listSchedules(opts: { orgId?: string; projectId?: string }): Promise<Schedule[]>;
+  updateSchedule(id: string, patch: Partial<Pick<Schedule, 'cadence' | 'enabled' | 'includeActive' | 'webhookUrl' | 'nextRunAt' | 'lastRunAt'>>): Promise<Schedule | null>;
+  deleteSchedule(id: string): Promise<boolean>;
+  /** Enabled schedules whose nextRunAt is at or before `nowISO`. */
+  listDueSchedules(nowISO: string): Promise<Schedule[]>;
+
+  // Notifications
+  createNotification(n: NewNotification): Promise<Notification>;
+  listNotifications(orgId: string, opts: { limit: number; unreadOnly?: boolean }): Promise<Notification[]>;
+  markNotificationRead(id: string): Promise<boolean>;
 }

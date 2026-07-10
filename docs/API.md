@@ -155,6 +155,23 @@ Errors: `400 missing_manifest | unrecognized_manifest`, `429 rate_limited`.
 **CLI equivalent (CI gate):** `npm run sca -- package-lock.json --fail-on high`
 exits `1` when vulnerabilities at/above the threshold are found, `0` otherwise.
 
+### Monitoring — scheduled scans & regression alerts (authenticated)
+```
+POST   /api/projects/:projectId/schedules   { cadence: daily|weekly|monthly, includeActive?, webhookUrl? }
+GET    /api/projects/:projectId/schedules
+PATCH  /api/schedules/:id                    { cadence?, enabled?, includeActive?, webhookUrl? }
+DELETE /api/schedules/:id
+GET    /api/scans/:id/diff                   { diff, regression, baselineScanId }
+GET    /api/orgs/:orgId/notifications?unread=1&limit=50
+POST   /api/notifications/:id/read
+```
+A scheduler (config `SCHEDULER_*`) enqueues due schedules. When a project scan completes it is
+diffed against the previous one; a regression (new high/critical finding, or a score drop) records
+a notification and fires any webhook configured on the project's schedules. `regression` shape:
+```json
+{ "isRegression": true, "level": "major", "reasons": ["1 new high/critical issue: No CSP", "Score dropped 18 (90 → 72)"] }
+```
+
 ## Planned endpoints (target state)
 
 ```

@@ -8,17 +8,23 @@
 
 import { PrismaClient, type Prisma } from '@prisma/client';
 import type { AuditReport } from '../core/types.js';
-import type {
-  Membership,
-  NewUser,
-  OAuthAccount,
-  Organization,
-  Project,
-  Role,
-  ScanRecord,
-  Store,
-  Team,
-  User,
+import {
+  nextRunFrom,
+  type Cadence,
+  type Membership,
+  type NewNotification,
+  type NewSchedule,
+  type NewUser,
+  type Notification,
+  type OAuthAccount,
+  type Organization,
+  type Project,
+  type Role,
+  type ScanRecord,
+  type Schedule,
+  type Store,
+  type Team,
+  type User,
 } from './types.js';
 
 function slugify(name: string): string {
@@ -213,7 +219,152 @@ export class PrismaStore implements Store {
       .map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString(), score: s.overall as number }));
   }
 
+  async previousScanForProject(projectId: string, excludeScanId: string): Promise<ScanRecord | null> {
+    const s = await this.prisma.scan.findFirst({
+      where: { projectId, status: 'COMPLETED', id: { not: excludeScanId } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!s) return null;
+    const report = (s.resultJson as unknown as AuditReport | null) ?? null;
+    return this.toScan(s, report?.target ?? '', report);
+  }
+
+  // ---- Schedules ----
+  async createSchedule(s: NewSchedule): Promise<Schedule> {
+    const created = await this.prisma.schedule.create({
+      data: {
+        projectId: s.projectId,
+        orgId: s.orgId,
+        cadence: s.cadence,
+        includeActive: s.includeActive ?? false,
+        webhookUrl: s.webhookUrl ?? null,
+        nextRunAt: new Date(nextRunFrom(s.cadence)),
+      },
+    });
+    return this.toSchedule(created);
+  }
+
+  async getSchedule(id: string): Promise<Schedule | null> {
+    const s = await this.prisma.schedule.findUnique({ where: { id } });
+    return s ? this.toSchedule(s) : null;
+  }
+
+  async listSchedules(opts: { orgId?: string; projectId?: string }): Promise<Schedule[]> {
+    const where: Prisma.ScheduleWhereInput = {};
+    if (opts.orgId) where.orgId = opts.orgId;
+    if (opts.projectId) where.projectId = opts.projectId;
+    const rows = await this.prisma.schedule.findMany({ where, orderBy: { createdAt: 'desc' } });
+    return rows.map((s) => this.toSchedule(s));
+  }
+
+  async updateSchedule(
+    id: string,
+    patch: Partial<Pick<Schedule, 'cadence' | 'enabled' | 'includeActive' | 'webhookUrl' | 'nextRunAt' | 'lastRunAt'>>,
+  ): Promise<Schedule | null> {
+    const data: Prisma.ScheduleUpdateInput = {};
+    if (patch.cadence !== undefined) data.cadence = patch.cadence;
+    if (patch.enabled !== undefined) data.enabled = patch.enabled;
+    if (patch.includeActive !== undefined) data.includeActive = patch.includeActive;
+    if (patch.webhookUrl !== undefined) data.webhookUrl = patch.webhookUrl;
+    if (patch.nextRunAt !== undefined) data.nextRunAt = new Date(patch.nextRunAt);
+    if (patch.lastRunAt !== undefined) data.lastRunAt = patch.lastRunAt ? new Date(patch.lastRunAt) : null;
+    const s = await this.prisma.schedule.update({ where: { id }, data });
+    return this.toSchedule(s);
+  }
+
+  async deleteSchedule(id: string): Promise<boolean> {
+    await this.prisma.schedule.delete({ where: { id } }).catch(() => null);
+    return true;
+  }
+
+  async listDueSchedules(nowISO: string): Promise<Schedule[]> {
+    const rows = await this.prisma.schedule.findMany({
+      where: { enabled: true, nextRunAt: { lte: new Date(nowISO) } },
+    });
+    return rows.map((s) => this.toSchedule(s));
+  }
+
+  // ---- Notifications ----
+  async createNotification(n: NewNotification): Promise<Notification> {
+    const created = await this.prisma.notification.create({
+      data: {
+        orgId: n.orgId,
+        type: n.type,
+        scanId: n.scanId ?? null,
+        projectId: n.projectId ?? null,
+        title: n.title,
+        body: n.body,
+        severity: n.severity,
+      },
+    });
+    return this.toNotification(created);
+  }
+
+  async listNotifications(orgId: string, opts: { limit: number; unreadOnly?: boolean }): Promise<Notification[]> {
+    const rows = await this.prisma.notification.findMany({
+      where: { orgId, ...(opts.unreadOnly ? { read: false } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: opts.limit,
+    });
+    return rows.map((n) => this.toNotification(n));
+  }
+
+  async markNotificationRead(id: string): Promise<boolean> {
+    await this.prisma.notification.update({ where: { id }, data: { read: true } }).catch(() => null);
+    return true;
+  }
+
   // ---- mappers ----
+  private toSchedule(s: {
+    id: string;
+    projectId: string;
+    orgId: string;
+    cadence: string;
+    includeActive: boolean;
+    enabled: boolean;
+    webhookUrl: string | null;
+    nextRunAt: Date;
+    lastRunAt: Date | null;
+    createdAt: Date;
+  }): Schedule {
+    return {
+      id: s.id,
+      projectId: s.projectId,
+      orgId: s.orgId,
+      cadence: s.cadence as Cadence,
+      includeActive: s.includeActive,
+      enabled: s.enabled,
+      webhookUrl: s.webhookUrl,
+      nextRunAt: s.nextRunAt.toISOString(),
+      lastRunAt: s.lastRunAt ? s.lastRunAt.toISOString() : null,
+      createdAt: s.createdAt.toISOString(),
+    };
+  }
+  private toNotification(n: {
+    id: string;
+    orgId: string;
+    type: string;
+    scanId: string | null;
+    projectId: string | null;
+    title: string;
+    body: string;
+    severity: string;
+    read: boolean;
+    createdAt: Date;
+  }): Notification {
+    return {
+      id: n.id,
+      orgId: n.orgId,
+      type: n.type as Notification['type'],
+      scanId: n.scanId,
+      projectId: n.projectId,
+      title: n.title,
+      body: n.body,
+      severity: n.severity as Notification['severity'],
+      read: n.read,
+      createdAt: n.createdAt.toISOString(),
+    };
+  }
   private toUser(u: { id: string; email: string; name: string | null; passwordHash: string | null; createdAt: Date }): User {
     return { id: u.id, email: u.email, name: u.name, passwordHash: u.passwordHash, createdAt: u.createdAt.toISOString() };
   }

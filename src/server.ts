@@ -37,6 +37,8 @@ import { registerAuthRoutes } from './api/routes-auth.js';
 import { registerTenancyRoutes } from './api/routes-tenancy.js';
 import { registerScanRoutes } from './api/routes-scans.js';
 import { registerScaRoutes } from './api/routes-sca.js';
+import { registerScheduleRoutes } from './api/routes-schedules.js';
+import { Scheduler } from './schedule/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -61,6 +63,15 @@ export async function buildServer() {
   registerTenancyRoutes(app, store);
   registerScanRoutes(app, store, queue);
   registerScaRoutes(app);
+  registerScheduleRoutes(app, store);
+
+  // Recurring-scan scheduler runs on the API node (not worker-only processes).
+  if (config.scheduler.enabled && process.env.AEGIS_ROLE !== 'worker') {
+    const scheduler = new Scheduler(store, queue);
+    scheduler.start();
+    app.addHook('onClose', async () => scheduler.stop());
+    app.log.info(`Scheduler enabled (every ${config.scheduler.intervalMs}ms)`);
+  }
 
   app.get('/health', async () => ({ status: 'ok', engine: '0.1.0', store: store.kind, queue: queue.kind, uptime: process.uptime() }));
   app.get('/api/modules', async () => ({ modules: moduleCatalog() }));

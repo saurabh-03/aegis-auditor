@@ -1,17 +1,22 @@
 /** In-memory Store implementation. Default when no DATABASE_URL is configured. */
 
 import { randomBytes, randomUUID } from 'node:crypto';
-import type {
-  Membership,
-  NewUser,
-  OAuthAccount,
-  Organization,
-  Project,
-  Role,
-  ScanRecord,
-  Store,
-  Team,
-  User,
+import {
+  nextRunFrom,
+  type Membership,
+  type NewNotification,
+  type NewSchedule,
+  type NewUser,
+  type Notification,
+  type OAuthAccount,
+  type Organization,
+  type Project,
+  type Role,
+  type ScanRecord,
+  type Schedule,
+  type Store,
+  type Team,
+  type User,
 } from './types.js';
 
 function slugify(name: string): string {
@@ -29,6 +34,8 @@ export class MemoryStore implements Store {
   private teams = new Map<string, Team>();
   private projects = new Map<string, Project>();
   private scans = new Map<string, ScanRecord>();
+  private schedules = new Map<string, Schedule>();
+  private notifications = new Map<string, Notification>();
   private orgSlugs = new Set<string>();
 
   async init(): Promise<void> {}
@@ -173,5 +180,91 @@ export class MemoryStore implements Store {
       .filter((s) => s.target === target && (!orgId || s.orgId === orgId) && s.overall != null)
       .map((s) => ({ id: s.id, createdAt: s.createdAt, score: s.overall as number }))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async previousScanForProject(projectId: string, excludeScanId: string): Promise<ScanRecord | null> {
+    return (
+      [...this.scans.values()]
+        .filter((s) => s.projectId === projectId && s.id !== excludeScanId && s.status === 'COMPLETED')
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
+    );
+  }
+
+  // ---- Schedules ----
+  async createSchedule(s: NewSchedule): Promise<Schedule> {
+    const sched: Schedule = {
+      id: randomUUID(),
+      projectId: s.projectId,
+      orgId: s.orgId,
+      cadence: s.cadence,
+      includeActive: s.includeActive ?? false,
+      enabled: true,
+      webhookUrl: s.webhookUrl ?? null,
+      nextRunAt: nextRunFrom(s.cadence),
+      lastRunAt: null,
+      createdAt: new Date().toISOString(),
+    };
+    this.schedules.set(sched.id, sched);
+    return sched;
+  }
+
+  async getSchedule(id: string): Promise<Schedule | null> {
+    return this.schedules.get(id) ?? null;
+  }
+
+  async listSchedules(opts: { orgId?: string; projectId?: string }): Promise<Schedule[]> {
+    return [...this.schedules.values()].filter(
+      (s) => (!opts.orgId || s.orgId === opts.orgId) && (!opts.projectId || s.projectId === opts.projectId),
+    );
+  }
+
+  async updateSchedule(
+    id: string,
+    patch: Partial<Pick<Schedule, 'cadence' | 'enabled' | 'includeActive' | 'webhookUrl' | 'nextRunAt' | 'lastRunAt'>>,
+  ): Promise<Schedule | null> {
+    const s = this.schedules.get(id);
+    if (!s) return null;
+    Object.assign(s, patch);
+    return s;
+  }
+
+  async deleteSchedule(id: string): Promise<boolean> {
+    return this.schedules.delete(id);
+  }
+
+  async listDueSchedules(nowISO: string): Promise<Schedule[]> {
+    return [...this.schedules.values()].filter((s) => s.enabled && s.nextRunAt <= nowISO);
+  }
+
+  // ---- Notifications ----
+  async createNotification(n: NewNotification): Promise<Notification> {
+    const notif: Notification = {
+      id: randomUUID(),
+      orgId: n.orgId,
+      type: n.type,
+      scanId: n.scanId ?? null,
+      projectId: n.projectId ?? null,
+      title: n.title,
+      body: n.body,
+      severity: n.severity,
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
+    this.notifications.set(notif.id, notif);
+    return notif;
+  }
+
+  async listNotifications(orgId: string, opts: { limit: number; unreadOnly?: boolean }): Promise<Notification[]> {
+    return [...this.notifications.values()]
+      .filter((n) => n.orgId === orgId && (!opts.unreadOnly || !n.read))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, opts.limit);
+  }
+
+  async markNotificationRead(id: string): Promise<boolean> {
+    const n = this.notifications.get(id);
+    if (!n) return false;
+    n.read = true;
+    return true;
   }
 }

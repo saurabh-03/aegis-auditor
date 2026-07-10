@@ -28,7 +28,6 @@ model User {
   apiKeys       ApiKey[]
   scans         Scan[]
   auditLogs     AuditLog[]
-  notifications Notification[]
 }
 
 model OAuthAccount {
@@ -48,11 +47,12 @@ model Organization {
   plan      Plan         @default(FREE)
   createdAt DateTime     @default(now())
 
-  members   Membership[]
-  teams     Team[]
-  projects  Project[]
-  apiKeys   ApiKey[]
-  auditLogs AuditLog[]
+  members       Membership[]
+  teams         Team[]
+  projects      Project[]
+  apiKeys       ApiKey[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
 }
 
 model Membership {
@@ -99,9 +99,10 @@ model Project {
   verifiedAt     DateTime?
   createdAt      DateTime  @default(now())
 
-  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  team  Team?        @relation(fields: [teamId], references: [id])
-  scans Scan[]
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team      Team?        @relation(fields: [teamId], references: [id])
+  scans     Scan[]
+  schedules Schedule[]
 
   @@index([orgId])
 }
@@ -250,13 +251,36 @@ model Webhook {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  type      String
-  payload   Json
-  readAt    DateTime?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String       @id @default(cuid())
+  orgId     String
+  type      String // "regression" | "scan_complete"
+  scanId    String?
+  projectId String?
+  title     String
+  body      String       @db.Text
+  severity  String // "info" | "warning" | "critical"
+  read      Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+}
+
+model Schedule {
+  id            String    @id @default(cuid())
+  projectId     String
+  orgId         String
+  cadence       String // "daily" | "weekly" | "monthly"
+  includeActive Boolean   @default(false)
+  enabled       Boolean   @default(true)
+  webhookUrl    String?
+  nextRunAt     DateTime
+  lastRunAt     DateTime?
+  createdAt     DateTime  @default(now())
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([enabled, nextRunAt])
+  @@index([orgId])
 }
 
 model AuditLog {

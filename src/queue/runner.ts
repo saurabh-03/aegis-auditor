@@ -6,6 +6,7 @@
 import { normalizeTarget } from '../core/http.js';
 import { runScan } from '../core/scanner.js';
 import { ALL_MODULES } from '../modules/registry.js';
+import { handleScanCompletion } from '../schedule/alerts.js';
 import type { Store } from '../store/types.js';
 import type { ProgressEvent, ScanJob } from './types.js';
 
@@ -58,6 +59,9 @@ export async function processScanJob(
       grade: report.overall.grade,
       at: now(),
     });
+
+    // Regression detection & alerting (best-effort; never fails the scan).
+    await handleScanCompletion(store, job, report).catch(() => {});
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await store.updateScan(job.scanId, { status: 'FAILED' });
