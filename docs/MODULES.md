@@ -64,12 +64,19 @@ category). `src/ai/tickets.ts` generates **GitHub/Jira tickets** from findings. 
   classify; never downloads full sensitive files; reports existence for remediation.
 
 ### Dependency Intelligence (19) — implemented
-`src/intel` holds a small, curated **offline CVE dataset** (real CVEs for jQuery, Bootstrap,
-Lodash, Moment.js, AngularJS, nginx, …) and a semver range matcher. `dependencies.ts` detects
-component versions (shared `fingerprint.ts`) and attaches concrete `cve[]` + CVSS to findings.
-In production this dataset syncs from a cached NVD/GHSA mirror.
+Two complementary paths, both in `src/intel`:
 
-### Still browser-dependent
-- **Lab Core Web Vitals** (LCP/CLS/INP field data): the `performance.ts` module covers passive
-  signals; full lab CWV needs the headless-Chrome worker (Phase 3 continuation), kept separate
-  because it requires a browser runtime.
+- **Passive (homepage):** `dependencies.ts` fingerprints component versions from the page
+  (shared `fingerprint.ts`) and matches them via **live OSV.dev** merged with a curated offline
+  dataset (`matchVulnerabilities`, deduped, OSV preferred). Sees only HTML-referenced libraries.
+- **Manifest SCA (full coverage):** `manifest.ts` parses real lockfiles
+  (`package-lock.json` v1/v2/v3, `package.json`, `yarn.lock`, `composer.lock`) and
+  `matchPackages` runs every dependency against OSV + local with bounded concurrency. Exposed as
+  `POST /api/sca` and the CI-gating CLI `npm run sca -- <manifest> --fail-on <sev>` (exit 1 on
+  findings). CVSS is a real v3.1 base score computed from the advisory vector (v4-only advisories
+  fall back to the severity label).
+
+### Lab Core Web Vitals (8b) — implemented (opt-in)
+`webvitals.ts` measures real LCP/CLS/FCP/TBT + a resource waterfall via optional Puppeteer
+(`npm run enable:browser`). TBT is the lab proxy for INP; true INP (simulated interaction) and
+moving the browser run into a dedicated worker are the remaining `TODO(aegis:cwv)` items.

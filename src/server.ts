@@ -36,6 +36,7 @@ import { getQueue } from './queue/index.js';
 import { registerAuthRoutes } from './api/routes-auth.js';
 import { registerTenancyRoutes } from './api/routes-tenancy.js';
 import { registerScanRoutes } from './api/routes-scans.js';
+import { registerScaRoutes } from './api/routes-sca.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +60,7 @@ export async function buildServer() {
   registerAuthRoutes(app, store);
   registerTenancyRoutes(app, store);
   registerScanRoutes(app, store, queue);
+  registerScaRoutes(app);
 
   app.get('/health', async () => ({ status: 'ok', engine: '0.1.0', store: store.kind, queue: queue.kind, uptime: process.uptime() }));
   app.get('/api/modules', async () => ({ modules: moduleCatalog() }));

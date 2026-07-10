@@ -125,6 +125,36 @@ Progress event shape (`src/queue/types.ts`):
 `type` is one of `queued | running | module | completed | failed`; `completed` carries
 `overall` and `grade`.
 
+### `POST /api/sca`
+Software-composition analysis of a dependency manifest. Public + rate-limited; 12 MB body limit.
+
+Request:
+```json
+{
+  "manifest": "<file contents>",     // package-lock.json | package.json | yarn.lock | composer.lock
+  "filename": "package-lock.json",   // optional, aids format detection
+  "source": "both",                  // both | osv | local
+  "failOn": "high"                   // severity threshold for `failing` count
+}
+```
+Response `200`:
+```json
+{
+  "manifest": "package-lock.json", "ecosystem": "npm", "scanned": 42,
+  "sourceUsed": "osv+local", "failOn": "high", "failing": 2,
+  "summary": { "critical": 1, "high": 1, "medium": 3, "low": 0 },
+  "vulnerabilities": [
+    { "package": "lodash", "version": "4.17.4", "cve": "CVE-2019-10744",
+      "cvss": 9.1, "severity": "critical", "weakness": "Prototype Pollution",
+      "fixedIn": "4.17.12", "reference": "https://…" }
+  ]
+}
+```
+Errors: `400 missing_manifest | unrecognized_manifest`, `429 rate_limited`.
+
+**CLI equivalent (CI gate):** `npm run sca -- package-lock.json --fail-on high`
+exits `1` when vulnerabilities at/above the threshold are found, `0` otherwise.
+
 ## Planned endpoints (target state)
 
 ```

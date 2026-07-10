@@ -139,11 +139,17 @@ export async function queryOsv(
       if (vuln.withdrawn) continue;
       const cve = pickCve(vuln);
       const vector = vuln.severity?.find((s) => s.type.startsWith('CVSS_V3'))?.score ?? '';
-      const cvss = vector ? cvssBaseScore(vector) : 0;
-      const severity =
-        cvss > 0
-          ? severityFromScore(cvss)
-          : mapLabel(vuln.database_specific?.severity);
+      let cvss = vector ? cvssBaseScore(vector) : 0;
+      let severity: CveEntry['severity'];
+      if (cvss > 0) {
+        severity = severityFromScore(cvss);
+      } else {
+        // No parseable CVSS v3 vector (e.g. CVSS v4-only advisories): fall back to
+        // the advisory's severity label and a representative score so ordering
+        // and display stay coherent rather than showing a misleading 0.
+        severity = mapLabel(vuln.database_specific?.severity);
+        cvss = nominalScore(severity);
+      }
       const cwe = vuln.database_specific?.cwe_ids?.[0];
       out.push({
         cve,
@@ -163,6 +169,11 @@ export async function queryOsv(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Representative CVSS when only a severity label is available (no v3 vector). */
+function nominalScore(severity: CveEntry['severity']): number {
+  return severity === 'critical' ? 9.0 : severity === 'high' ? 7.5 : severity === 'medium' ? 5.0 : 2.0;
 }
 
 function mapLabel(label?: string): CveEntry['severity'] {
