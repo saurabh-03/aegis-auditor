@@ -4,6 +4,9 @@
 
 generator client {
   provider = "prisma-client-js"
+  // "native" for local dev; the musl target is required for Alpine Docker
+  // (node:20-alpine) so the query engine is baked in and never downloaded at runtime.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

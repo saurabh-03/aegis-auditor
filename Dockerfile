@@ -3,6 +3,8 @@
 # 1) Build: install all deps, generate Prisma client, compile TS, prune to prod deps.
 FROM node:20-alpine AS build
 WORKDIR /app
+# Prisma needs OpenSSL to build the correct engine for Alpine (musl).
+RUN apk add --no-cache openssl
 COPY package.json package-lock.json* ./
 # --include=dev: the build needs typescript/tsx even if the build env sets
 # NODE_ENV=production. `npm install` (not `npm ci`) tolerates lockfile drift.
@@ -20,6 +22,7 @@ RUN npm prune --omit=dev
 FROM node:20-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+RUN apk add --no-cache openssl
 RUN addgroup -S aegis && adduser -S aegis -G aegis
 
 COPY --from=build /app/node_modules ./node_modules
@@ -28,6 +31,10 @@ COPY --from=build /app/prisma ./prisma
 COPY package.json ./
 COPY public ./public
 COPY docker-entrypoint.sh ./
+
+# Let the non-root user read/execute the baked Prisma engines (belt-and-suspenders
+# so `prisma db push` never needs to download/write at runtime).
+RUN chown -R aegis:aegis /app/node_modules/.prisma /app/node_modules/@prisma 2>/dev/null || true
 
 USER aegis
 EXPOSE 4000
