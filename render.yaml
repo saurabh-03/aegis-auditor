@@ -72,7 +72,8 @@ services:
     runtime: node
     plan: free
     buildCommand: cd web && npm ci && npm run build
-    startCommand: cd web && npm run start
+    # Must bind Render's assigned $PORT (not the hardcoded 3200 dev port).
+    startCommand: cd web && npx next start -H 0.0.0.0 -p $PORT
     envVars:
       - key: NODE_ENV
         value: production

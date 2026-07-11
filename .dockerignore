@@ -1,0 +1,12 @@
+node_modules
+web/node_modules
+dist
+web/.next
+.git
+.github
+*.log
+.env
+.env.*
+coverage
+test
+exec-report.png
