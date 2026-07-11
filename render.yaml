@@ -1,10 +1,13 @@
-# Render Blueprint — one-file deploy of the whole Aegis stack.
+# Render Blueprint — Aegis stack (free-tier friendly).
 # https://render.com/docs/blueprint-spec
 #
-# Usage: push this repo to GitHub (done), then in Render:
-#   New → Blueprint → connect saurabh-03/aegis-auditor → Apply.
-# Render provisions Postgres, Redis, the API, a worker, and the web dashboard,
-# wiring the env vars below automatically. See docs/DEPLOY-PUBLIC.md.
+# Usage: New → Blueprint → connect saurabh-03/aegis-auditor → Apply.
+#
+# Free tier does NOT allow background Worker services, so this runs everything in
+# the single `aegis-api` web service: with REDIS_URL unset the app uses its
+# in-process queue (enqueue + process scans + live WebSocket progress + scheduler
+# all in one process). For scale, add REDIS_URL + a `type: worker` service on a
+# paid plan (see docs/DEPLOY-PUBLIC.md). Postgres is kept for persistence.
 
 databases:
   - name: aegis-postgres
@@ -12,14 +15,7 @@ databases:
     postgresMajorVersion: "16"
 
 services:
-  # ---- Redis (BullMQ queue backend) ----
-  - type: redis
-    name: aegis-redis
-    plan: free
-    maxmemoryPolicy: noeviction # queue jobs must not be evicted
-    ipAllowList: [] # only reachable from Render services
-
-  # ---- API (Fastify: REST + WebSocket + static) ----
+  # ---- API + scan engine + scheduler, all in one process (free-tier friendly) ----
   - type: web
     name: aegis-api
     runtime: docker
@@ -29,14 +25,11 @@ services:
     # Schema sync + server start is handled by the image entrypoint
     # (docker-entrypoint.sh) — no dockerCommand, to avoid shell-quoting issues.
     envVars:
-      - key: AEGIS_ROLE
-        value: api # enqueue only; the worker service processes scans
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
         fromDatabase: { name: aegis-postgres, property: connectionString }
-      - key: REDIS_URL
-        fromService: { type: redis, name: aegis-redis, property: connectionString }
+      # No REDIS_URL → in-process queue processes scans in this same service.
       - key: JWT_SECRET
         generateValue: true # Render generates a strong secret
       - key: RATE_LIMIT_MAX
@@ -45,25 +38,6 @@ services:
       # Optional: require login even for the quick scan endpoint.
       # - key: REQUIRE_AUTH_FOR_SCAN
       #   value: "1"
-
-  # ---- Worker (runs scans off the queue; scale as needed) ----
-  - type: worker
-    name: aegis-worker
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    dockerCommand: node dist/worker.js
-    plan: free
-    envVars:
-      - key: AEGIS_ROLE
-        value: worker
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase: { name: aegis-postgres, property: connectionString }
-      - key: REDIS_URL
-        fromService: { type: redis, name: aegis-redis, property: connectionString }
-      - key: SCAN_CONCURRENCY
-        value: "4"
 
   # ---- Web dashboard (Next.js) ----
   - type: web
