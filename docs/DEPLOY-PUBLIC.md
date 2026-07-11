@@ -40,7 +40,8 @@ stack (Postgres + Redis + API + worker + web dashboard).
    then redeploy `aegis-web`.
 4. Open the **aegis-web** URL — that's your public dashboard. 🎉
 
-(The blueprint runs `prisma db push` before the API boots to create the schema.)
+(The API's start command runs `prisma db push` to create/sync the schema on boot —
+no pre-deploy hook needed, so it works on Render's free tier.)
 
 ### Alternatives
 - **Railway** — connect the repo, add Postgres + Redis plugins, deploy the

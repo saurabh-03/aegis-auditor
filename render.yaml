@@ -26,8 +26,9 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     healthCheckPath: /health
-    # Create the schema before the app boots (no migration files yet → db push).
-    preDeployCommand: npx prisma db push --skip-generate
+    # Free tier has no pre-deploy hook, so create/sync the schema at startup
+    # (idempotent) then launch the API. `prisma` is a runtime dependency.
+    dockerCommand: sh -c "npx prisma db push --skip-generate && node dist/server.js"
     envVars:
       - key: AEGIS_ROLE
         value: api # enqueue only; the worker service processes scans
