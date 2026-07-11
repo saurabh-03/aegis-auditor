@@ -4,8 +4,10 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
-# `npm install` (not `npm ci`) tolerates lockfile drift across npm versions.
-RUN npm install --no-audit --no-fund
+# --include=dev: the build needs typescript/tsx even if the build env sets
+# NODE_ENV=production. `npm install` (not `npm ci`) tolerates lockfile drift.
+# Dev deps are dropped later via `npm prune --omit=dev`.
+RUN npm install --include=dev --no-audit --no-fund
 COPY . .
 # Generate the Prisma client (no live DB needed; dummy URL satisfies config load).
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"

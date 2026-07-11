@@ -71,10 +71,12 @@ services:
     name: aegis-web
     runtime: node
     plan: free
-    # Use `npm install` (not `npm ci`): the lockfile can drift across npm
-    # versions between local and Render, and `npm ci`'s exact-match check then
-    # fails. `npm install` reconciles and still builds reproducibly enough.
-    buildCommand: cd web && npm install --no-audit --no-fund && npm run build
+    # --include=dev is REQUIRED: Render sets NODE_ENV=production, under which
+    # npm skips devDependencies — but the Next.js build needs typescript,
+    # tailwind, postcss, and @types. Without this only ~25 prod packages install
+    # and the tsconfig "@/*" alias can't resolve. `npm install` (not `npm ci`)
+    # also tolerates lockfile drift across npm versions.
+    buildCommand: cd web && npm install --include=dev --no-audit --no-fund && npm run build
     # Must bind Render's assigned $PORT (not the hardcoded 3200 dev port).
     startCommand: cd web && npx next start -H 0.0.0.0 -p $PORT
     envVars:
