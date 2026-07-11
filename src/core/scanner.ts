@@ -11,6 +11,7 @@
 import { ENGINE_VERSION, config } from './config.js';
 import { fetchPage, timedFetch } from './http.js';
 import { scoreAll, sortFindings } from './scoring.js';
+import { assertPublicHost } from './ssrf.js';
 import type {
   AuditReport,
   ModuleResult,
@@ -59,6 +60,9 @@ export async function runScan(
   const startedAt = Date.now();
   const timeoutMs = options.timeoutMs ?? config.defaultTimeoutMs;
   const log = (msg: string) => events.onLog?.(msg);
+
+  // SSRF guard: never let a scan reach private/internal/metadata addresses.
+  await assertPublicHost(target.hostname, timeoutMs);
 
   // Single homepage fetch shared across modules.
   let pagePromise: Promise<PageSnapshot> | null = null;

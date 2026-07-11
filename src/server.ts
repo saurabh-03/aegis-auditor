@@ -24,6 +24,8 @@ import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import { config } from './core/config.js';
 import { normalizeTarget } from './core/http.js';
+import { assertPublicHost, BlockedTargetError } from './core/ssrf.js';
+import { requireAuthAsync } from './api/authctx.js';
 import { runScan } from './core/scanner.js';
 import type { ScanOptions } from './core/types.js';
 import { ALL_MODULES, moduleCatalog } from './modules/registry.js';
@@ -84,6 +86,11 @@ export async function buildServer() {
 
   // Public ad-hoc PASSIVE scan. Active scans must go through a verified project.
   app.post<{ Body: ScanBody }>('/api/scan', async (req, reply) => {
+    // Optional hardening for public instances: require a session/API key.
+    if (config.security.requireAuthForScan) {
+      const auth = await requireAuthAsync(req, reply, store);
+      if (!auth) return;
+    }
     const rl = rateLimit(req.ip || 'unknown');
     reply.header('x-ratelimit-remaining', String(rl.remaining));
     if (!rl.ok) return reply.code(429).send({ error: 'rate_limited', resetAt: rl.resetAt });
@@ -105,6 +112,14 @@ export async function buildServer() {
       target = normalizeTarget(body.target);
     } catch (err) {
       return reply.code(400).send({ error: 'invalid_target', message: (err as Error).message });
+    }
+
+    // SSRF guard — reject private/internal targets before doing any work.
+    try {
+      await assertPublicHost(target.hostname);
+    } catch (err) {
+      if (err instanceof BlockedTargetError) return reply.code(400).send({ error: 'blocked_target', message: err.message });
+      throw err;
     }
 
     const options: ScanOptions = {

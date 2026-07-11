@@ -13,6 +13,10 @@ services:
       DATABASE_URL: "postgresql://aegis:aegis@postgres:5432/aegis?schema=public"
       REDIS_URL: "redis://redis:6379"
       AEGIS_ROLE: "api" # API enqueues only; the worker service processes scans
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}" # override in .env for real deploys
+      RATE_LIMIT_MAX: "10"
+      # SSRF protection is ON by default. Create the schema once before first boot:
+      #   docker compose run --rm api npx prisma db push --skip-generate
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,6 +33,7 @@ services:
       REDIS_URL: "redis://redis:6379"
       AEGIS_ROLE: "worker"
       SCAN_CONCURRENCY: "4"
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,6 +41,20 @@ services:
         condition: service_healthy
     restart: unless-stopped
     # Scale out with: docker compose up --scale worker=3
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "3200:3200"
+    environment:
+      NODE_ENV: "production"
+      API_ORIGIN: "http://api:4000" # server-side proxy target (internal network)
+      NEXT_PUBLIC_WS_ORIGIN: "${WS_ORIGIN:-ws://localhost:4000}" # browser WS; set to your public wss:// URL
+    depends_on:
+      - api
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine

@@ -33,6 +33,20 @@ export interface AppConfig {
     /** How often to poll for due schedules. */
     intervalMs: number;
   };
+  /** Hardening for public/internet-facing deployments. */
+  security: {
+    /** Reject scans of private/reserved/internal targets (SSRF guard). */
+    blockPrivateTargets: boolean;
+    /** Require a signed-in user (or API key) for the quick /api/scan endpoint. */
+    requireAuthForScan: boolean;
+  };
+}
+
+/** Env flag helper: truthy unless explicitly off. */
+function flag(name: string, defaultOn: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined) return defaultOn;
+  return !['off', 'false', '0', 'no'].includes(raw.toLowerCase());
 }
 
 function cveSource(): AppConfig['cve']['source'] {
@@ -73,6 +87,12 @@ export const config: AppConfig = {
     enabled: browserEnabled(),
     timeoutMs: int('BROWSER_TIMEOUT_MS', 30_000),
     formFactor: (process.env.BROWSER_FORM_FACTOR ?? 'desktop') === 'mobile' ? 'mobile' : 'desktop',
+  },
+  security: {
+    // Safe by default: block internal targets. Set ALLOW_PRIVATE_TARGETS=1 for
+    // local development if you need to scan localhost / a LAN host.
+    blockPrivateTargets: !flag('ALLOW_PRIVATE_TARGETS', false),
+    requireAuthForScan: flag('REQUIRE_AUTH_FOR_SCAN', false),
   },
   scheduler: {
     enabled: !['off', 'false', '0', 'no'].includes((process.env.SCHEDULER_ENABLED ?? 'on').toLowerCase()),

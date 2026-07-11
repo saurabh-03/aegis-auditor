@@ -1,0 +1,84 @@
+# Render Blueprint — one-file deploy of the whole Aegis stack.
+# https://render.com/docs/blueprint-spec
+#
+# Usage: push this repo to GitHub (done), then in Render:
+#   New → Blueprint → connect saurabh-03/aegis-auditor → Apply.
+# Render provisions Postgres, Redis, the API, a worker, and the web dashboard,
+# wiring the env vars below automatically. See docs/DEPLOY-PUBLIC.md.
+
+databases:
+  - name: aegis-postgres
+    plan: free # 90-day free Postgres; upgrade for production
+    postgresMajorVersion: "16"
+
+services:
+  # ---- Redis (BullMQ queue backend) ----
+  - type: redis
+    name: aegis-redis
+    plan: free
+    maxmemoryPolicy: noeviction # queue jobs must not be evicted
+    ipAllowList: [] # only reachable from Render services
+
+  # ---- API (Fastify: REST + WebSocket + static) ----
+  - type: web
+    name: aegis-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    # Create the schema before the app boots (no migration files yet → db push).
+    preDeployCommand: npx prisma db push --skip-generate
+    envVars:
+      - key: AEGIS_ROLE
+        value: api # enqueue only; the worker service processes scans
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: aegis-postgres, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: redis, name: aegis-redis, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true # Render generates a strong secret
+      - key: RATE_LIMIT_MAX
+        value: "10" # tighter default for a public instance
+      # SSRF protection stays ON by default (do NOT set ALLOW_PRIVATE_TARGETS).
+      # Optional: require login even for the quick scan endpoint.
+      # - key: REQUIRE_AUTH_FOR_SCAN
+      #   value: "1"
+
+  # ---- Worker (runs scans off the queue; scale as needed) ----
+  - type: worker
+    name: aegis-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node dist/worker.js
+    plan: free
+    envVars:
+      - key: AEGIS_ROLE
+        value: worker
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: aegis-postgres, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: redis, name: aegis-redis, property: connectionString }
+      - key: SCAN_CONCURRENCY
+        value: "4"
+
+  # ---- Web dashboard (Next.js) ----
+  - type: web
+    name: aegis-web
+    runtime: node
+    plan: free
+    buildCommand: cd web && npm ci && npm run build
+    startCommand: cd web && npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # After the first deploy, set these to the API service's real URL
+      # (Render → aegis-api → copy its https URL). They can't be auto-derived
+      # with a protocol prefix, so they're left for you to fill in once.
+      - key: API_ORIGIN
+        sync: false # e.g. https://aegis-api.onrender.com
+      - key: NEXT_PUBLIC_WS_ORIGIN
+        sync: false # e.g. wss://aegis-api.onrender.com
