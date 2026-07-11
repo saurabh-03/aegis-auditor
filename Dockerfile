@@ -27,6 +27,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY package.json ./
 COPY public ./public
+COPY docker-entrypoint.sh ./
 
 USER aegis
 EXPOSE 4000
@@ -34,6 +35,6 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# In memory mode this starts immediately. With DATABASE_URL set, run
-# `npm run db:migrate` (prisma migrate deploy) before/at startup — see docs/DEPLOYMENT.md.
-CMD ["node", "dist/server.js"]
+# Entrypoint syncs the DB schema (when DATABASE_URL is set) then starts the API.
+# The worker service overrides this with `node dist/worker.js`.
+CMD ["sh", "docker-entrypoint.sh"]
