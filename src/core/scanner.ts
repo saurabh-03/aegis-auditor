@@ -10,9 +10,11 @@
 
 import { ENGINE_VERSION, config } from './config.js';
 import { fetchPage, timedFetch } from './http.js';
+import { crawlSurface } from '../modules/browser/spider.js';
 import { scoreAll, sortFindings } from './scoring.js';
 import { assertPublicHost } from './ssrf.js';
 import type {
+  AttackSurface,
   AuditReport,
   ModuleResult,
   PageSnapshot,
@@ -74,12 +76,30 @@ export async function runScan(
     return pagePromise;
   };
 
+  // Single attack-surface crawl shared across modules (built on first request).
+  let surfacePromise: Promise<AttackSurface> | null = null;
+  const getSurface = () => {
+    if (!surfacePromise) {
+      log(`Crawling ${target.toString()} …`);
+      surfacePromise = crawlSurface(target, {
+        maxPages: config.crawl.maxPages,
+        maxDepth: config.crawl.maxDepth,
+        renderJs: config.crawl.renderJs,
+        respectRobots: config.crawl.respectRobots,
+        timeoutMs,
+        log,
+      });
+    }
+    return surfacePromise;
+  };
+
   const ctx: ScanContext = {
     target,
     now: new Date(),
     options: { ...options, authorized: options.authorized, timeoutMs },
     log,
     getPage,
+    getSurface,
     fetch: (url, init) => timedFetch(url, timeoutMs, init),
   };
 

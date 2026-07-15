@@ -157,6 +157,58 @@ export interface RedirectHop {
   location: string;
 }
 
+/**
+ * A single injectable request surface discovered by the crawler: a URL plus the
+ * method and parameter names an active tester (ZAP/Nuclei) would fuzz.
+ */
+export interface Endpoint {
+  /** Absolute, normalized URL (query string preserved for GET params). */
+  url: string;
+  method: 'GET' | 'POST';
+  /** Names of query- and body-parameters observed for this endpoint. */
+  params: string[];
+  /** How the endpoint was discovered. */
+  source: 'seed' | 'link' | 'form' | 'xhr' | 'sitemap';
+  /** Response content-type when known (e.g. `text/html`, `application/json`). */
+  contentType?: string;
+}
+
+/** An HTML form discovered during the crawl. */
+export interface DiscoveredForm {
+  /** Absolute action URL the form submits to. */
+  action: string;
+  method: 'GET' | 'POST';
+  /** Names of the form's input/select/textarea controls. */
+  inputs: string[];
+  /** URL of the page the form was found on. */
+  foundOn: string;
+  /** True when a CSRF-token-looking hidden field is present. */
+  hasCsrfToken: boolean;
+}
+
+/**
+ * The shared attack-surface map produced once per scan by the crawler and
+ * consumed by later modules (passive coverage checks now; active ZAP/Nuclei
+ * modules in Phase B). Mirrors the single-fetch {@link PageSnapshot} pattern:
+ * built lazily and cached so the crawl happens at most once.
+ */
+export interface AttackSurface {
+  /** Deduplicated injectable endpoints, in discovery order. */
+  endpoints: Endpoint[];
+  /** Forms discovered across crawled pages. */
+  forms: DiscoveredForm[];
+  /** In-scope hosts encountered (the seed host plus same-site subdomains). */
+  discoveredHosts: string[];
+  /** URLs that were in-links but out of scope (off-site / blocked). */
+  offScopeUrls: string[];
+  /** Number of pages actually fetched/rendered. */
+  crawledCount: number;
+  /** True if a page/depth cap stopped the crawl before exhaustion. */
+  truncated: boolean;
+  /** True when a real browser rendered pages; false for the HTTP-only fallback. */
+  renderedWithBrowser: boolean;
+}
+
 /** Shared context passed to every module. */
 export interface ScanContext {
   target: URL;
@@ -165,6 +217,11 @@ export interface ScanContext {
   log: (msg: string) => void;
   /** Cached homepage fetch; first caller triggers the network request. */
   getPage(): Promise<PageSnapshot>;
+  /**
+   * Cached attack-surface crawl; first caller triggers the crawl. Shared by all
+   * modules so the site is crawled at most once per scan.
+   */
+  getSurface(): Promise<AttackSurface>;
   /** Generic fetch helper honoring the scan timeout. */
   fetch(url: string, init?: RequestInit): Promise<Response>;
 }

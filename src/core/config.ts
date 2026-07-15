@@ -27,6 +27,17 @@ export interface AppConfig {
     /** 'mobile' | 'desktop' form factor for the emulated viewport. */
     formFactor: 'mobile' | 'desktop';
   };
+  /** Attack-surface crawler (feeds the spider module and, later, active DAST). */
+  crawl: {
+    /** Max pages fetched/rendered per scan. */
+    maxPages: number;
+    /** Max link depth from the seed. */
+    maxDepth: number;
+    /** Render pages in a real browser (needs Puppeteer; HTTP fallback otherwise). */
+    renderJs: boolean;
+    /** Honor robots.txt Disallow rules while crawling. */
+    respectRobots: boolean;
+  };
   /** Recurring-scan scheduler. */
   scheduler: {
     enabled: boolean;
@@ -87,6 +98,14 @@ export const config: AppConfig = {
     enabled: browserEnabled(),
     timeoutMs: int('BROWSER_TIMEOUT_MS', 30_000),
     formFactor: (process.env.BROWSER_FORM_FACTOR ?? 'desktop') === 'mobile' ? 'mobile' : 'desktop',
+  },
+  crawl: {
+    maxPages: int('CRAWL_MAX_PAGES', 25),
+    maxDepth: int('CRAWL_MAX_DEPTH', 3),
+    // Reuse the browser engine unless it's explicitly turned off; degrades to
+    // an HTTP-only crawl when Puppeteer isn't installed.
+    renderJs: browserEnabled(),
+    respectRobots: flag('CRAWL_RESPECT_ROBOTS', true),
   },
   security: {
     // Safe by default: block internal targets. Set ALLOW_PRIVATE_TARGETS=1 for
