@@ -49,6 +49,24 @@ export type FindingStatus = 'pass' | 'warn' | 'fail' | 'info';
 export type Probability = 'low' | 'medium' | 'high';
 
 /**
+ * How sure the engine is that a finding is real. Passive checks are effectively
+ * `confirmed` (they observe a fact); active scanners (ZAP/Nuclei) range from a
+ * template match (`tentative`/`firm`) to a verified exploit (`confirmed`).
+ */
+export type Confidence = 'tentative' | 'firm' | 'confirmed';
+
+/**
+ * WHERE a finding was observed. Passive, site-wide findings omit this; active
+ * per-endpoint findings carry it so the report and the regression-diff engine
+ * can track "this issue on this endpoint" over time.
+ */
+export interface FindingLocation {
+  url: string;
+  param?: string;
+  method?: string;
+}
+
+/**
  * A fully-explained audit finding. This is the atomic unit of a report.
  *
  * Passive modules must be able to populate every field from evidence they
@@ -76,8 +94,16 @@ export interface Finding {
   probability: Probability;
   /** CVE identifiers when a specific vulnerable component/version is matched. */
   cve?: string[];
+  /** CWE weakness identifiers, e.g. `CWE-79`. Populated by active scanners. */
+  cwe?: string[];
   /** OWASP category mappings, e.g. `A05:2021-Security Misconfiguration`. */
   owasp?: string[];
+  /** Engine confidence; defaults to `confirmed` for passive fact-based checks. */
+  confidence?: Confidence;
+  /** Endpoint/parameter the finding was observed at (active findings). */
+  location?: FindingLocation;
+  /** Captured request/response evidence for triage (active findings). */
+  requestResponse?: { request: string; response: string };
   /** Concrete remediation guidance. */
   remediation: string;
   /** Human estimate of engineering effort, e.g. "15 minutes", "0.5 day". */

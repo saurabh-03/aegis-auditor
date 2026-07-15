@@ -1,5 +1,7 @@
 /** Runtime configuration, environment-driven with safe defaults. */
 
+import type { NucleiSeverity } from '../integrations/nuclei.js';
+
 export const ENGINE_VERSION = '0.1.0';
 
 export interface AppConfig {
@@ -38,6 +40,19 @@ export interface AppConfig {
     /** Honor robots.txt Disallow rules while crawling. */
     respectRobots: boolean;
   };
+  /** Nuclei active-DAST integration (authorization-gated; optional binary). */
+  nuclei: {
+    /** Binary name/path (`NUCLEI_BIN`); the adapter degrades if it's absent. */
+    binaryPath: string;
+    /** Severity floor sent to Nuclei's `-severity` filter. */
+    severities: NucleiSeverity[];
+    /** Requests-per-second cap. */
+    rateLimit: number;
+    /** Hard kill timeout for the whole Nuclei run. */
+    timeoutMs: number;
+    /** Cap on endpoints handed to Nuclei per scan (bounds run time). */
+    maxTargets: number;
+  };
   /** Recurring-scan scheduler. */
   scheduler: {
     enabled: boolean;
@@ -63,6 +78,16 @@ function flag(name: string, defaultOn: boolean): boolean {
 function cveSource(): AppConfig['cve']['source'] {
   const v = (process.env.CVE_SOURCE ?? 'both').toLowerCase();
   return v === 'local' || v === 'osv' || v === 'both' ? v : 'both';
+}
+
+/** Parse NUCLEI_SEVERITIES (comma list); default medium and up to keep noise down. */
+function nucleiSeverities(): NucleiSeverity[] {
+  const valid: NucleiSeverity[] = ['info', 'low', 'medium', 'high', 'critical', 'unknown'];
+  const raw = (process.env.NUCLEI_SEVERITIES ?? 'medium,high,critical')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s): s is NucleiSeverity => (valid as string[]).includes(s));
+  return raw.length ? raw : ['medium', 'high', 'critical'];
 }
 
 /** Browser metrics are attempted unless explicitly disabled. If Puppeteer is not
@@ -106,6 +131,13 @@ export const config: AppConfig = {
     // an HTTP-only crawl when Puppeteer isn't installed.
     renderJs: browserEnabled(),
     respectRobots: flag('CRAWL_RESPECT_ROBOTS', true),
+  },
+  nuclei: {
+    binaryPath: process.env.NUCLEI_BIN ?? 'nuclei',
+    severities: nucleiSeverities(),
+    rateLimit: int('NUCLEI_RATE_LIMIT', 150),
+    timeoutMs: int('NUCLEI_TIMEOUT_MS', 180_000),
+    maxTargets: int('NUCLEI_MAX_TARGETS', 50),
   },
   security: {
     // Safe by default: block internal targets. Set ALLOW_PRIVATE_TARGETS=1 for
