@@ -52,6 +52,8 @@ export interface NucleiOptions {
   includeRequestResponse?: boolean;
   /** Escape hatch for additional raw args. */
   extraArgs?: string[];
+  /** Best-effort progress (0..1) driven by Nuclei's periodic `-stats-json`. */
+  onProgress?: (fraction: number, note?: string) => void;
   log?: (msg: string) => void;
 }
 
@@ -66,6 +68,32 @@ function asStringArray(v: unknown): string[] {
   if (Array.isArray(v)) return v.map((x) => String(x)).filter(Boolean);
   if (typeof v === 'string' && v) return [v];
   return [];
+}
+
+/**
+ * Parse one Nuclei `-stats-json` line (emitted on stderr) into a progress
+ * fraction and a short human note. Returns null for non-stats or malformed
+ * lines. Nuclei reports `percent` (0..100) plus request counts.
+ */
+export function parseNucleiStats(line: string): { fraction: number; note: string } | null {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed[0] !== '{') return null;
+  let obj: any;
+  try {
+    obj = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  const pct = Number(obj.percent);
+  if (!Number.isFinite(pct)) return null;
+  const fraction = Math.max(0, Math.min(1, pct / 100));
+  const req = Number(obj.requests);
+  const total = Number(obj.total);
+  const note =
+    Number.isFinite(req) && Number.isFinite(total) && total > 0
+      ? `${Math.round(pct)}% · ${req}/${total} req`
+      : `${Math.round(pct)}%`;
+  return { fraction, note };
 }
 
 /**
@@ -142,6 +170,8 @@ export async function runNuclei(urls: string[], opts: NucleiOptions = {}): Promi
       '-l',
       listFile,
     ];
+    // Periodic machine-readable stats on stderr drive the progress bar.
+    if (opts.onProgress) args.push('-stats', '-stats-json', '-stats-interval', '3');
     if (opts.severities?.length) args.push('-severity', opts.severities.join(','));
     if (opts.rateLimit) args.push('-rl', String(opts.rateLimit));
     for (const t of opts.templates ?? []) args.push('-t', t);
@@ -178,9 +208,21 @@ export async function runNuclei(urls: string[], opts: NucleiOptions = {}): Promi
       child.stdout?.on('data', (d) => {
         stdout += d.toString();
       });
+      let stderrBuf = '';
       child.stderr?.on('data', (d) => {
-        const s = d.toString().trim();
-        if (s) log(`nuclei: ${s.slice(0, 200)}`);
+        stderrBuf += d.toString();
+        let nl: number;
+        while ((nl = stderrBuf.indexOf('\n')) !== -1) {
+          const line = stderrBuf.slice(0, nl);
+          stderrBuf = stderrBuf.slice(nl + 1);
+          const stats = opts.onProgress ? parseNucleiStats(line) : null;
+          if (stats) {
+            opts.onProgress?.(stats.fraction, stats.note);
+          } else {
+            const s = line.trim();
+            if (s) log(`nuclei: ${s.slice(0, 200)}`);
+          }
+        }
       });
       child.on('error', (err: NodeJS.ErrnoException) => {
         clearTimeout(killer);

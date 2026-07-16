@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseNucleiJsonl, runNuclei } from '../src/integrations/nuclei.js';
+import { parseNucleiJsonl, parseNucleiStats, runNuclei } from '../src/integrations/nuclei.js';
 import { mapNucleiResults } from '../src/modules/active/nuclei.js';
 
 // A representative slice of `nuclei -jsonl` output (one object per line), plus a
@@ -94,4 +94,24 @@ test('runNuclei degrades to null when the binary is absent', async () => {
 test('runNuclei returns [] for an empty target list without spawning', async () => {
   const out = await runNuclei([], { binaryPath: 'definitely-not-a-real-binary-aegis-xyz' });
   assert.deepEqual(out, []);
+});
+
+test('parseNucleiStats extracts fraction + note, ignores non-stats lines', () => {
+  const stats = parseNucleiStats(
+    JSON.stringify({ percent: 40, requests: 1200, total: 3000, matched: 2, errors: 0 }),
+  );
+  assert.ok(stats);
+  assert.equal(stats?.fraction, 0.4);
+  assert.match(stats?.note ?? '', /40%/);
+  assert.match(stats?.note ?? '', /1200\/3000/);
+
+  // percent-only line still yields a fraction + short note.
+  const bare = parseNucleiStats(JSON.stringify({ percent: 100 }));
+  assert.equal(bare?.fraction, 1);
+
+  // Non-stats / malformed / plain-text lines → null.
+  assert.equal(parseNucleiStats('[INF] running templates'), null);
+  assert.equal(parseNucleiStats('{ not json'), null);
+  assert.equal(parseNucleiStats(JSON.stringify({ msg: 'no percent here' })), null);
+  assert.equal(parseNucleiStats(''), null);
 });

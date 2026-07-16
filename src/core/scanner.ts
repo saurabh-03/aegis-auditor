@@ -26,6 +26,8 @@ import type {
 export interface ScanEvents {
   onModuleStart?: (module: ScanModule) => void;
   onModuleFinish?: (result: ModuleResult) => void;
+  /** Intra-module progress for long-running modules; fraction is 0..1. */
+  onModuleProgress?: (module: ScanModule, fraction: number, note?: string) => void;
   onLog?: (msg: string) => void;
 }
 
@@ -98,6 +100,8 @@ export async function runScan(
     now: new Date(),
     options: { ...options, authorized: options.authorized, timeoutMs },
     log,
+    // Base no-op; each module gets a progress fn bound to its own name below.
+    progress: () => {},
     getPage,
     getSurface,
     fetch: (url, init) => timedFetch(url, timeoutMs, init),
@@ -113,8 +117,17 @@ export async function runScan(
     eligible.map(async (m): Promise<ModuleResult> => {
       events.onModuleStart?.(m);
       const t0 = performance.now();
+      // Per-module context: progress is bound to this module's name. Everything
+      // else (getPage/getSurface/fetch) is shared via the base ctx closures.
+      const mctx: ScanContext = {
+        ...ctx,
+        progress: (fraction, note) => {
+          const clamped = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
+          events.onModuleProgress?.(m, clamped, note);
+        },
+      };
       try {
-        const r = await m.run(ctx);
+        const r = await m.run(mctx);
         events.onModuleFinish?.(r);
         return r;
       } catch (err) {

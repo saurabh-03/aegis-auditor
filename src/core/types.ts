@@ -241,6 +241,12 @@ export interface ScanContext {
   options: Required<Pick<ScanOptions, 'authorized' | 'timeoutMs'>> & ScanOptions;
   now: Date;
   log: (msg: string) => void;
+  /**
+   * Report intra-module progress (0..1) for long-running modules (active DAST).
+   * Best-effort and optional: modules that finish quickly need not call it, and
+   * the fraction is clamped. `note` is a short human label (e.g. "40% · 20/50").
+   */
+  progress(fraction: number, note?: string): void;
   /** Cached homepage fetch; first caller triggers the network request. */
   getPage(): Promise<PageSnapshot>;
   /**

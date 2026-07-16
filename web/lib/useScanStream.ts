@@ -8,6 +8,8 @@ export interface ScanStreamState {
   status: 'idle' | 'queued' | 'running' | 'completed' | 'failed';
   progress: number;
   lastModule?: string;
+  /** Short per-module note during a long active module (e.g. "40% · 20/50 req"). */
+  moduleNote?: string;
   overall?: number;
   grade?: string;
   error?: string;
@@ -30,7 +32,7 @@ export function useScanStream(scanId: string | null): ScanStreamState {
 
     ws.onmessage = (ev) => {
       // Wire messages are either ProgressEvents or an initial { type:'status', status } snapshot.
-      let msg: { type: string; status?: string; module?: string; progress?: number; overall?: number; grade?: string; error?: string };
+      let msg: { type: string; status?: string; module?: string; progress?: number; note?: string; overall?: number; grade?: string; error?: string };
       try {
         msg = JSON.parse(ev.data);
       } catch {
@@ -55,6 +57,13 @@ export function useScanStream(scanId: string | null): ScanStreamState {
         if (msg.type === 'module') {
           next.status = 'running';
           next.lastModule = msg.module;
+          next.moduleNote = undefined;
+          if (typeof msg.progress === 'number') next.progress = msg.progress;
+        }
+        if (msg.type === 'module-progress') {
+          next.status = 'running';
+          next.lastModule = msg.module;
+          next.moduleNote = msg.note;
           if (typeof msg.progress === 'number') next.progress = msg.progress;
         }
         if (msg.type === 'completed') {

@@ -137,12 +137,14 @@ export const nucleiModule: ScanModule = {
     }
 
     ctx.log(`Nuclei: scanning ${urls.length} endpoint(s)…`);
+    ctx.progress(0.01, `starting · ${urls.length} endpoints`);
     const results = await runNuclei(urls, {
       binaryPath: config.nuclei.binaryPath,
       severities: config.nuclei.severities,
       rateLimit: config.nuclei.rateLimit,
       timeoutMs: config.nuclei.timeoutMs,
       includeRequestResponse: true,
+      onProgress: (fraction, note) => ctx.progress(fraction, note),
       log: ctx.log,
     });
 

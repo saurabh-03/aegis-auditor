@@ -23,7 +23,7 @@
     "prisma:validate": "prisma validate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
-    "test": "node --import tsx --test test/scoring.test.ts test/headers.test.ts test/auth.test.ts test/scans.test.ts test/intel.test.ts test/sca.test.ts test/diff.test.ts test/schedule.test.ts test/apikey.test.ts test/report.test.ts test/webhook.test.ts test/ssrf.test.ts test/crawl.test.ts test/nuclei.test.ts",
+    "test": "node --import tsx --test test/scoring.test.ts test/headers.test.ts test/auth.test.ts test/scans.test.ts test/intel.test.ts test/sca.test.ts test/diff.test.ts test/schedule.test.ts test/apikey.test.ts test/report.test.ts test/webhook.test.ts test/ssrf.test.ts test/crawl.test.ts test/nuclei.test.ts test/progress.test.ts",
     "lint": "echo \"(configure eslint here)\" && exit 0"
   },
   "dependencies": {

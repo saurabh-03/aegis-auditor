@@ -158,10 +158,14 @@ export interface RegressionAssessment {
 
 export interface ProgressEvent {
   scanId: string;
-  type: 'queued' | 'running' | 'module' | 'completed' | 'failed';
+  type: 'queued' | 'running' | 'module' | 'module-progress' | 'completed' | 'failed';
   progress?: number;
   module?: string;
   moduleOk?: boolean;
+  /** Fraction (0..1) within the current module, for `module-progress`. */
+  moduleProgress?: number;
+  /** Short label for `module-progress`, e.g. "40% · 20/50 req". */
+  note?: string;
   overall?: number;
   grade?: string;
   error?: string;

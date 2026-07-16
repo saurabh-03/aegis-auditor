@@ -25,6 +25,10 @@ export async function processScanJob(
 ): Promise<void> {
   const total = ALL_MODULES.length;
   let done = 0;
+  // Fractional progress of modules still running (module name → 0..1), so a long
+  // active module (e.g. Nuclei) advances the overall bar instead of freezing it.
+  const inFlight = new Map<string, number>();
+  const overall = () => Math.min(1, (done + [...inFlight.values()].reduce((a, b) => a + b, 0)) / total);
 
   await store.updateScan(job.scanId, { status: 'RUNNING' });
   emit({ scanId: job.scanId, type: 'running', progress: 0, at: now() });
@@ -32,14 +36,27 @@ export async function processScanJob(
   try {
     const target = normalizeTarget(job.target);
     const report = await runScan(target, ALL_MODULES, job.options, {
+      onModuleProgress: (m, fraction, note) => {
+        inFlight.set(m.name, fraction);
+        emit({
+          scanId: job.scanId,
+          type: 'module-progress',
+          module: m.name,
+          moduleProgress: fraction,
+          ...(note ? { note } : {}),
+          progress: overall(),
+          at: now(),
+        });
+      },
       onModuleFinish: (r) => {
+        inFlight.delete(r.module);
         done += 1;
         emit({
           scanId: job.scanId,
           type: 'module',
           module: r.module,
           moduleOk: r.ok,
-          progress: Math.min(1, done / total),
+          progress: overall(),
           at: now(),
         });
       },
