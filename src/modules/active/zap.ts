@@ -16,6 +16,7 @@
 import { createHash } from 'node:crypto';
 import { config } from '../../core/config.js';
 import { finding, pass } from '../../core/finding.js';
+import { buildAuthHeaders } from '../../core/http.js';
 import { runZapScan, type ZapAlert, type ZapRisk } from '../../integrations/zap.js';
 import type { Confidence, Finding, ModuleResult, ScanContext, ScanModule, Severity } from '../../core/types.js';
 
@@ -159,6 +160,8 @@ export const zapModule: ScanModule = {
     const surface = await ctx.getSurface();
     const urls = [...new Set(surface.endpoints.map((e) => e.url))].slice(0, config.zap.maxSeedUrls);
 
+    const authHeaders = buildAuthHeaders(ctx.auth);
+    if (ctx.auth) ctx.log('ZAP: running authenticated (session headers via replacer rules).');
     ctx.log(`ZAP: active scan of ${ctx.target.origin} seeded with ${urls.length} endpoint(s)…`);
     ctx.progress(0.01, `seeding ${urls.length} endpoints`);
     const alerts = await runZapScan(urls, {
@@ -167,6 +170,7 @@ export const zapModule: ScanModule = {
       target: ctx.target.origin,
       timeoutMs: config.zap.timeoutMs,
       maxSeedUrls: config.zap.maxSeedUrls,
+      ...(Object.keys(authHeaders).length ? { headers: authHeaders } : {}),
       onProgress: (fraction, note) => ctx.progress(fraction, note),
       log: ctx.log,
     });

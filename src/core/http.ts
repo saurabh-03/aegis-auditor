@@ -1,7 +1,22 @@
 /** Network helpers shared by modules: timed fetch and redirect tracing. */
 
 import { config } from './config.js';
-import type { PageSnapshot, RedirectHop } from './types.js';
+import type { PageSnapshot, RedirectHop, ScanAuth } from './types.js';
+
+/**
+ * Flatten {@link ScanAuth} into a plain header map (headers + a Cookie header).
+ * Header names are lowercased so callers merge without duplicating. Returns an
+ * empty object when there is no auth. These values are secrets — never log them.
+ */
+export function buildAuthHeaders(auth?: ScanAuth): Record<string, string> {
+  if (!auth) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(auth.headers ?? {})) {
+    if (k && typeof v === 'string') out[k.toLowerCase()] = v;
+  }
+  if (auth.cookies) out['cookie'] = auth.cookies;
+  return out;
+}
 
 /** fetch() with an AbortController-backed timeout. */
 export async function timedFetch(
@@ -52,6 +67,7 @@ export async function fetchPage(
   startUrl: string,
   timeoutMs: number,
   maxHops = 8,
+  authHeaders: Record<string, string> = {},
 ): Promise<PageSnapshot> {
   const redirects: RedirectHop[] = [];
   let current = startUrl;
@@ -59,7 +75,7 @@ export async function fetchPage(
 
   for (let hop = 0; hop <= maxHops; hop++) {
     const started = performance.now();
-    const res = await timedFetch(current, timeoutMs);
+    const res = await timedFetch(current, timeoutMs, { headers: authHeaders });
     latencyMs = Math.round(performance.now() - started);
 
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {

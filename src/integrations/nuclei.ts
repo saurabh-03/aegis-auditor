@@ -52,9 +52,29 @@ export interface NucleiOptions {
   includeRequestResponse?: boolean;
   /** Escape hatch for additional raw args. */
   extraArgs?: string[];
+  /** Auth headers for an authenticated scan → one `-H "Name: value"` each. */
+  headers?: Record<string, string>;
   /** Best-effort progress (0..1) driven by Nuclei's periodic `-stats-json`. */
   onProgress?: (fraction: number, note?: string) => void;
   log?: (msg: string) => void;
+}
+
+/**
+ * Build the Nuclei CLI argument vector (pure — exported for testing). Progress
+ * stats and header injection are opt-in so the vector stays minimal otherwise.
+ */
+export function buildNucleiArgs(listFile: string, opts: NucleiOptions): string[] {
+  const args = ['-jsonl', '-silent', '-nc', '-duc', '-l', listFile];
+  if (opts.onProgress) args.push('-stats', '-stats-json', '-stats-interval', '3');
+  if (opts.severities?.length) args.push('-severity', opts.severities.join(','));
+  if (opts.rateLimit) args.push('-rl', String(opts.rateLimit));
+  for (const t of opts.templates ?? []) args.push('-t', t);
+  if (opts.includeRequestResponse) args.push('-irr');
+  for (const [name, value] of Object.entries(opts.headers ?? {})) {
+    if (name && typeof value === 'string') args.push('-H', `${name}: ${value}`);
+  }
+  if (opts.extraArgs?.length) args.push(...opts.extraArgs);
+  return args;
 }
 
 const VALID_SEVERITIES: NucleiSeverity[] = ['info', 'low', 'medium', 'high', 'critical', 'unknown'];
@@ -162,21 +182,7 @@ export async function runNuclei(urls: string[], opts: NucleiOptions = {}): Promi
     const listFile = join(dir, 'targets.txt');
     await writeFile(listFile, urls.join('\n'), 'utf8');
 
-    const args = [
-      '-jsonl',
-      '-silent',
-      '-nc', // no color
-      '-duc', // disable update check (no network calls to update templates mid-scan)
-      '-l',
-      listFile,
-    ];
-    // Periodic machine-readable stats on stderr drive the progress bar.
-    if (opts.onProgress) args.push('-stats', '-stats-json', '-stats-interval', '3');
-    if (opts.severities?.length) args.push('-severity', opts.severities.join(','));
-    if (opts.rateLimit) args.push('-rl', String(opts.rateLimit));
-    for (const t of opts.templates ?? []) args.push('-t', t);
-    if (opts.includeRequestResponse) args.push('-irr');
-    if (opts.extraArgs?.length) args.push(...opts.extraArgs);
+    const args = buildNucleiArgs(listFile, opts);
 
     const results = await new Promise<NucleiResult[] | null>((resolve) => {
       let stdout = '';

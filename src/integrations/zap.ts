@@ -47,9 +47,32 @@ export interface ZapOptions {
   pollIntervalMs?: number;
   /** Cap on endpoints seeded into the tree (bounds setup time). */
   maxSeedUrls?: number;
+  /** Auth headers for an authenticated scan → injected via ZAP replacer rules. */
+  headers?: Record<string, string>;
   /** Best-effort progress (0..1) from the active-scan status. */
   onProgress?: (fraction: number, note?: string) => void;
   log?: (msg: string) => void;
+}
+
+/**
+ * Build the query params for ZAP `/JSON/replacer/action/addRule` calls that add
+ * each auth header to every outgoing request (matchType REQ_HEADER). Pure —
+ * exported for testing. The header value is a secret; callers must not log it.
+ */
+export function buildReplacerRules(headers: Record<string, string>): Array<Record<string, string>> {
+  const rules: Array<Record<string, string>> = [];
+  for (const [name, value] of Object.entries(headers)) {
+    if (!name || typeof value !== 'string') continue;
+    rules.push({
+      description: `aegis-auth-${name}`,
+      enabled: 'true',
+      matchType: 'REQ_HEADER',
+      matchRegex: 'false',
+      matchString: name,
+      replacement: value,
+    });
+  }
+  return rules;
 }
 
 const VALID_RISKS: ZapRisk[] = ['High', 'Medium', 'Low', 'Informational'];
@@ -142,6 +165,15 @@ export async function runZapScan(urls: string[], opts: ZapOptions): Promise<ZapA
   }
 
   try {
+    // 1b) Authenticated scan: register replacer rules so every ZAP request
+    //     (spider, active scan, seeding) carries the session headers/cookies.
+    if (opts.headers && Object.keys(opts.headers).length > 0) {
+      for (const rule of buildReplacerRules(opts.headers)) {
+        await zapGet(base, '/JSON/replacer/action/addRule/', rule, apiKey, perCallTimeout).catch(() => {});
+      }
+      log('ZAP: authenticated scan (session headers registered as replacer rules).');
+    }
+
     // 2) Seed discovered endpoints into ZAP's site tree so the active scan has
     //    context beyond the bare origin. Best-effort per URL.
     const seeds = urls.slice(0, opts.maxSeedUrls ?? 100);

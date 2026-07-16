@@ -36,7 +36,24 @@ export interface CrawlOptions {
   renderJs: boolean;
   respectRobots: boolean;
   timeoutMs: number;
+  /** Auth headers (incl. Cookie) sent on every request in an authed crawl. */
+  authHeaders?: Record<string, string>;
+  /** Extra URL substrings to never follow (logout-avoidance). */
+  excludeUrlPatterns?: string[];
   log?: (msg: string) => void;
+}
+
+/**
+ * URL substrings never crawled in an authenticated scan: following them would
+ * destroy the very session we're testing with. Always applied on top of any
+ * caller-supplied patterns.
+ */
+const DEFAULT_EXCLUDES = ['logout', 'signout', 'sign-out', 'log-out', 'deleteaccount', 'delete-account'];
+
+/** True if `url` contains any exclude substring (case-insensitive). */
+export function isExcluded(url: string, extra: string[] = []): boolean {
+  const u = url.toLowerCase();
+  return [...DEFAULT_EXCLUDES, ...extra.map((p) => p.toLowerCase())].some((p) => p && u.includes(p));
 }
 
 interface QueueItem {
@@ -59,6 +76,8 @@ const CSRF_HINT = /csrf|xsrf|_token|authenticity_token|__requestverificationtoke
 export async function crawlSurface(seed: URL, opts: CrawlOptions): Promise<AttackSurface> {
   const log = opts.log ?? (() => {});
   const scope = registrableDomain(seed.hostname);
+  const excludes = opts.excludeUrlPatterns ?? [];
+  const authHeaders = opts.authHeaders ?? {};
 
   const endpoints = new Map<string, Endpoint>();
   const forms: DiscoveredForm[] = [];
@@ -105,8 +124,8 @@ export async function crawlSurface(seed: URL, opts: CrawlOptions): Promise<Attac
       if (opts.respectRobots && isDisallowed(current.pathname, disallow)) continue;
 
       const extract = browser
-        ? await extractWithBrowser(browser, item.url, opts.timeoutMs).catch(() => null)
-        : await extractWithHttp(item.url, opts.timeoutMs).catch(() => null);
+        ? await extractWithBrowser(browser, item.url, opts.timeoutMs, authHeaders).catch(() => null)
+        : await extractWithHttp(item.url, opts.timeoutMs, authHeaders).catch(() => null);
       crawled++;
       if (!extract) continue;
 
@@ -148,6 +167,8 @@ export async function crawlSurface(seed: URL, opts: CrawlOptions): Promise<Attac
           offScope.add(abs);
           continue;
         }
+        // Logout-avoidance: never record or follow session-destroying URLs.
+        if (isExcluded(abs, excludes)) continue;
         discoveredHosts.add(u.hostname);
         addEndpoint(endpoints, abs, 'GET', 'link');
 
@@ -288,8 +309,12 @@ function isDisallowed(pathname: string, disallow: string[]): boolean {
 // HTTP fallback extraction
 // ---------------------------------------------------------------------------
 
-async function extractWithHttp(url: string, timeoutMs: number): Promise<PageExtract | null> {
-  const res = await timedFetch(url, timeoutMs, { redirect: 'follow' }).catch(() => null);
+async function extractWithHttp(
+  url: string,
+  timeoutMs: number,
+  authHeaders: Record<string, string> = {},
+): Promise<PageExtract | null> {
+  const res = await timedFetch(url, timeoutMs, { redirect: 'follow', headers: authHeaders }).catch(() => null);
   if (!res) return null;
   const contentType = res.headers.get('content-type') ?? undefined;
   if (contentType && !/text\/html|application\/xhtml/i.test(contentType)) {
@@ -355,11 +380,20 @@ async function closeBrowser(browser: any): Promise<void> {
   }
 }
 
-async function extractWithBrowser(browser: any, url: string, timeoutMs: number): Promise<PageExtract | null> {
+async function extractWithBrowser(
+  browser: any,
+  url: string,
+  timeoutMs: number,
+  authHeaders: Record<string, string> = {},
+): Promise<PageExtract | null> {
   const page = await browser.newPage();
   const xhr = new Set<string>();
   try {
     await page.setUserAgent(config.userAgent);
+    if (Object.keys(authHeaders).length > 0) {
+      // Sends Authorization/Cookie/etc. on every request the page makes.
+      await page.setExtraHTTPHeaders(authHeaders).catch(() => {});
+    }
     page.on('request', (req: any) => {
       try {
         const type = req.resourceType();

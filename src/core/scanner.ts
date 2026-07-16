@@ -9,7 +9,7 @@
  */
 
 import { ENGINE_VERSION, config } from './config.js';
-import { fetchPage, timedFetch } from './http.js';
+import { buildAuthHeaders, fetchPage, timedFetch } from './http.js';
 import { crawlSurface } from '../modules/browser/spider.js';
 import { scoreAll, sortFindings } from './scoring.js';
 import { assertPublicHost } from './ssrf.js';
@@ -68,12 +68,16 @@ export async function runScan(
   // SSRF guard: never let a scan reach private/internal/metadata addresses.
   await assertPublicHost(target.hostname, timeoutMs);
 
+  // Authenticated-scan headers (secrets — never logged). Empty when no auth.
+  const authHeaders = buildAuthHeaders(options.auth);
+  if (options.auth) log('Authenticated scan: injecting session credentials into requests.');
+
   // Single homepage fetch shared across modules.
   let pagePromise: Promise<PageSnapshot> | null = null;
   const getPage = () => {
     if (!pagePromise) {
       log(`Fetching ${target.toString()} …`);
-      pagePromise = fetchPage(target.toString(), timeoutMs);
+      pagePromise = fetchPage(target.toString(), timeoutMs, 8, authHeaders);
     }
     return pagePromise;
   };
@@ -89,6 +93,8 @@ export async function runScan(
         renderJs: config.crawl.renderJs,
         respectRobots: config.crawl.respectRobots,
         timeoutMs,
+        authHeaders,
+        ...(options.auth?.excludeUrlPatterns ? { excludeUrlPatterns: options.auth.excludeUrlPatterns } : {}),
         log,
       });
     }
@@ -104,7 +110,10 @@ export async function runScan(
     progress: () => {},
     getPage,
     getSurface,
-    fetch: (url, init) => timedFetch(url, timeoutMs, init),
+    // ctx.fetch injects auth headers (call-site init.headers win on conflict).
+    fetch: (url, init) =>
+      timedFetch(url, timeoutMs, { ...init, headers: { ...authHeaders, ...(init?.headers as Record<string, string>) } }),
+    ...(options.auth ? { auth: options.auth } : {}),
   };
 
   const { eligible, skippedActive } = selectModules(modules, options);

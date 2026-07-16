@@ -17,6 +17,7 @@
 import { createHash } from 'node:crypto';
 import { config } from '../../core/config.js';
 import { finding, pass } from '../../core/finding.js';
+import { buildAuthHeaders } from '../../core/http.js';
 import { runNuclei, type NucleiResult, type NucleiSeverity } from '../../integrations/nuclei.js';
 import type { Confidence, Finding, ModuleResult, ScanContext, ScanModule, Severity } from '../../core/types.js';
 
@@ -136,6 +137,8 @@ export const nucleiModule: ScanModule = {
       };
     }
 
+    const authHeaders = buildAuthHeaders(ctx.auth);
+    if (ctx.auth) ctx.log('Nuclei: running authenticated (session headers injected).');
     ctx.log(`Nuclei: scanning ${urls.length} endpoint(s)…`);
     ctx.progress(0.01, `starting · ${urls.length} endpoints`);
     const results = await runNuclei(urls, {
@@ -144,6 +147,7 @@ export const nucleiModule: ScanModule = {
       rateLimit: config.nuclei.rateLimit,
       timeoutMs: config.nuclei.timeoutMs,
       includeRequestResponse: true,
+      ...(Object.keys(authHeaders).length ? { headers: authHeaders } : {}),
       onProgress: (fraction, note) => ctx.progress(fraction, note),
       log: ctx.log,
     });

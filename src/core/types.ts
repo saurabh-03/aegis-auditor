@@ -146,6 +146,27 @@ export interface ScanModule {
   run(ctx: ScanContext): Promise<ModuleResult>;
 }
 
+/**
+ * Credentials for an authenticated scan. Lets the crawler and active modules
+ * reach past a login wall so logged-in surface is tested, not just the public
+ * shell.
+ *
+ * SECURITY: these are secrets. They are used only in-flight to authenticate
+ * outbound requests — they must never be written into findings, evidence, the
+ * persisted report, or logs. The engine treats them as write-only.
+ */
+export interface ScanAuth {
+  /** Extra request headers, e.g. `{ Authorization: "Bearer …" }`. */
+  headers?: Record<string, string>;
+  /** Raw Cookie header value, e.g. `"session=abc; theme=dark"`. */
+  cookies?: string;
+  /**
+   * URL substrings the crawler must never follow — logout-avoidance. Matched
+   * anywhere in the absolute URL; defaults (logout/signout/…) are always added.
+   */
+  excludeUrlPatterns?: string[];
+}
+
 /** Options that shape a scan. */
 export interface ScanOptions {
   /**
@@ -161,6 +182,8 @@ export interface ScanOptions {
   includeActive?: boolean;
   /** Per-request timeout in ms for network calls. */
   timeoutMs?: number;
+  /** Credentials for an authenticated scan (never persisted; see {@link ScanAuth}). */
+  auth?: ScanAuth;
 }
 
 /** Snapshot of the target's homepage fetched once and shared by modules. */
@@ -254,8 +277,17 @@ export interface ScanContext {
    * modules so the site is crawled at most once per scan.
    */
   getSurface(): Promise<AttackSurface>;
-  /** Generic fetch helper honoring the scan timeout. */
+  /**
+   * Generic fetch helper honoring the scan timeout. When the scan carries
+   * {@link ScanAuth}, auth headers/cookies are injected automatically.
+   */
   fetch(url: string, init?: RequestInit): Promise<Response>;
+  /**
+   * Authenticated-scan credentials, if any. Active modules read this to pass
+   * auth to their engines (Nuclei `-H`, ZAP replacer). Write-only — never copy
+   * into findings or logs.
+   */
+  auth?: ScanAuth;
 }
 
 /** Aggregate score for one category. */
