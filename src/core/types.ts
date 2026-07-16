@@ -100,6 +100,11 @@ export interface Finding {
   owasp?: string[];
   /** Engine confidence; defaults to `confirmed` for passive fact-based checks. */
   confidence?: Confidence;
+  /**
+   * Modules that independently reported this issue, set by the finding-quality
+   * pass when duplicates are merged. ≥2 distinct engines raises confidence.
+   */
+  corroboratedBy?: string[];
   /** Endpoint/parameter the finding was observed at (active findings). */
   location?: FindingLocation;
   /** Captured request/response evidence for triage (active findings). */
@@ -339,5 +344,7 @@ export interface AuditReport {
   meta: {
     engineVersion: string;
     passiveOnly: boolean;
+    /** Duplicate findings collapsed by the finding-quality pass. */
+    mergedDuplicates?: number;
   };
 }

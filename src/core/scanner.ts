@@ -13,6 +13,7 @@ import { buildAuthHeaders, fetchPage, timedFetch } from './http.js';
 import { crawlSurface } from '../modules/browser/spider.js';
 import { captureSession } from '../modules/browser/login.js';
 import { scoreAll, sortFindings } from './scoring.js';
+import { refineFindings } from './quality.js';
 import { assertPublicHost } from './ssrf.js';
 import type {
   AttackSurface,
@@ -174,7 +175,10 @@ export async function runScan(
     }),
   );
 
-  const findings = sortFindings(results.flatMap((r) => r.findings));
+  // Finding-quality pass: collapse duplicate/corroborating findings BEFORE
+  // scoring so per-endpoint noise doesn't over-penalize the score.
+  const refined = refineFindings(results.flatMap((r) => r.findings));
+  const findings = sortFindings(refined.findings);
   const { categories, overall } = scoreAll(findings);
 
   const data: Record<string, Record<string, unknown> | undefined> = {};
@@ -199,6 +203,7 @@ export async function runScan(
     meta: {
       engineVersion: ENGINE_VERSION,
       passiveOnly: !(options.authorized && options.includeActive),
+      mergedDuplicates: refined.merged,
     },
   };
 
