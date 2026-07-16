@@ -53,6 +53,17 @@ export interface AppConfig {
     /** Cap on endpoints handed to Nuclei per scan (bounds run time). */
     maxTargets: number;
   };
+  /** OWASP ZAP active-DAST integration (authorization-gated; optional daemon). */
+  zap: {
+    /** Daemon base URL (`ZAP_API_URL`); empty string disables the module. */
+    apiUrl: string;
+    /** API key (`ZAP_API_KEY`) sent as `apikey`. */
+    apiKey: string;
+    /** Overall time budget for the active-scan poll loop. */
+    timeoutMs: number;
+    /** Cap on endpoints seeded into ZAP's site tree per scan. */
+    maxSeedUrls: number;
+  };
   /** Recurring-scan scheduler. */
   scheduler: {
     enabled: boolean;
@@ -138,6 +149,12 @@ export const config: AppConfig = {
     rateLimit: int('NUCLEI_RATE_LIMIT', 150),
     timeoutMs: int('NUCLEI_TIMEOUT_MS', 180_000),
     maxTargets: int('NUCLEI_MAX_TARGETS', 50),
+  },
+  zap: {
+    apiUrl: process.env.ZAP_API_URL ?? '',
+    apiKey: process.env.ZAP_API_KEY ?? '',
+    timeoutMs: int('ZAP_TIMEOUT_MS', 300_000),
+    maxSeedUrls: int('ZAP_MAX_SEED_URLS', 100),
   },
   security: {
     // Safe by default: block internal targets. Set ALLOW_PRIVATE_TARGETS=1 for

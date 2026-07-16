@@ -21,6 +21,7 @@ import { webVitalsModule } from './webvitals.js';
 import { portsModule } from './active/ports.js';
 import { exposureModule } from './active/exposure.js';
 import { nucleiModule } from './active/nuclei.js';
+import { zapModule } from './active/zap.js';
 
 /** All modules, passive first then active. Order is display-only. */
 export const ALL_MODULES: ScanModule[] = [
@@ -48,6 +49,7 @@ export const ALL_MODULES: ScanModule[] = [
   portsModule,
   exposureModule,
   nucleiModule,
+  zapModule,
 ];
 
 export const PASSIVE_MODULES = ALL_MODULES.filter((m) => m.mode === 'passive');

@@ -23,6 +23,9 @@ data:
   BROWSER_METRICS: "auto"
   DATABASE_URL: "postgresql://aegis:$(POSTGRES_PASSWORD)@aegis-postgres:5432/aegis?schema=public"
   REDIS_URL: "redis://aegis-redis:6379"
+  # Active DAST: the worker reaches the internal ZAP daemon here. Leave unset to
+  # disable (the ZAP module degrades to an info finding). See k8s/zap.yaml.
+  ZAP_API_URL: "http://aegis-zap:8080"
 ---
 # TEMPLATE ONLY — replace with managed secrets. Values shown are placeholders.
 apiVersion: v1
@@ -34,6 +37,8 @@ type: Opaque
 stringData:
   JWT_SECRET: "replace-me-with-a-long-random-string"
   POSTGRES_PASSWORD: "replace-me"
+  # ZAP daemon API key (shared by the daemon and the worker).
+  ZAP_API_KEY: "replace-me-with-a-random-zap-key"
   # Optional integrations:
   ANTHROPIC_API_KEY: ""
   GOOGLE_CLIENT_ID: ""
