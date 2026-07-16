@@ -14,6 +14,7 @@ import { crawlSurface } from '../modules/browser/spider.js';
 import { captureSession } from '../modules/browser/login.js';
 import { scoreAll, sortFindings } from './scoring.js';
 import { refineFindings } from './quality.js';
+import { replayFindings } from './replay.js';
 import { assertPublicHost } from './ssrf.js';
 import type {
   AttackSurface,
@@ -178,7 +179,23 @@ export async function runScan(
   // Finding-quality pass: collapse duplicate/corroborating findings BEFORE
   // scoring so per-endpoint noise doesn't over-penalize the score.
   const refined = refineFindings(results.flatMap((r) => r.findings));
-  const findings = sortFindings(refined.findings);
+
+  // Active finding replay: on an active scan, re-verify cheaply-checkable
+  // findings so confirmed issues are marked `confirmed` and false positives are
+  // demoted out of the score. Runs on the deduped set (once per issue).
+  let effectiveFindings = refined.findings;
+  let replayStats: { reproduced: number; contradicted: number; skipped: number } | null = null;
+  if (options.authorized && options.includeActive && config.replay.enabled) {
+    const rep = await replayFindings(refined.findings, (u) => ctx.fetch(u, { redirect: 'follow' }), {
+      targetOrigin: target.origin,
+      log,
+    });
+    effectiveFindings = rep.findings;
+    replayStats = { reproduced: rep.reproduced, contradicted: rep.contradicted, skipped: rep.skipped };
+    if (rep.contradicted) log(`Replay demoted ${rep.contradicted} unreproduced finding(s).`);
+  }
+
+  const findings = sortFindings(effectiveFindings);
   const { categories, overall } = scoreAll(findings);
 
   const data: Record<string, Record<string, unknown> | undefined> = {};
@@ -204,6 +221,9 @@ export async function runScan(
       engineVersion: ENGINE_VERSION,
       passiveOnly: !(options.authorized && options.includeActive),
       mergedDuplicates: refined.merged,
+      ...(replayStats
+        ? { replayReproduced: replayStats.reproduced, replayContradicted: replayStats.contradicted }
+        : {}),
     },
   };
 

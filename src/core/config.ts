@@ -66,6 +66,11 @@ export interface AppConfig {
     /** Cap on endpoints seeded into ZAP's site tree per scan. */
     maxSeedUrls: number;
   };
+  /** Active finding replay (re-verify findings to suppress false positives). */
+  replay: {
+    /** Re-request cheaply-verifiable findings on active scans. */
+    enabled: boolean;
+  };
   /** Recurring-scan scheduler. */
   scheduler: {
     enabled: boolean;
@@ -164,6 +169,9 @@ export const config: AppConfig = {
     // local development if you need to scan localhost / a LAN host.
     blockPrivateTargets: !flag('ALLOW_PRIVATE_TARGETS', false),
     requireAuthForScan: flag('REQUIRE_AUTH_FOR_SCAN', false),
+  },
+  replay: {
+    enabled: flag('REPLAY_ENABLED', true),
   },
   scheduler: {
     enabled: !['off', 'false', '0', 'no'].includes((process.env.SCHEDULER_ENABLED ?? 'on').toLowerCase()),

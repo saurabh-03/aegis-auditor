@@ -346,5 +346,9 @@ export interface AuditReport {
     passiveOnly: boolean;
     /** Duplicate findings collapsed by the finding-quality pass. */
     mergedDuplicates?: number;
+    /** Findings re-verified as still reproducing (active replay). */
+    replayReproduced?: number;
+    /** Findings demoted because a replay did not reproduce them. */
+    replayContradicted?: number;
   };
 }

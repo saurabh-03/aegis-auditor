@@ -62,21 +62,30 @@ function locationKey(f: Finding): string {
 }
 
 /**
+ * Classify a finding into a known issue class, or null when it matches no rule.
+ * Shared by the dedup signature and the replay verifier so both agree on what
+ * kind of issue a finding is.
+ */
+export function classifyFinding(f: Finding): { cls: string; siteWide: boolean } | null {
+  const rule = CLASS_RULES.find((r) => r.re.test(f.title ?? ''));
+  return rule ? { cls: rule.cls, siteWide: rule.siteWide } : null;
+}
+
+/**
  * A stable signature identifying "the same issue". Includes the category so a
  * merge never moves a finding between scoring buckets. Unknown issue types fall
  * back to cwe+title at their exact location — conservative, so distinct issues
  * are never wrongly merged.
  */
 export function signatureOf(f: Finding): string {
-  const title = f.title ?? '';
-  const rule = CLASS_RULES.find((r) => r.re.test(title));
-  if (rule) {
-    return rule.siteWide
-      ? `${f.category}|sw|${rule.cls}`
-      : `${f.category}|loc|${rule.cls}|${locationKey(f)}`;
+  const cls = classifyFinding(f);
+  if (cls) {
+    return cls.siteWide
+      ? `${f.category}|sw|${cls.cls}`
+      : `${f.category}|loc|${cls.cls}|${locationKey(f)}`;
   }
   const cwe = (f.cwe && f.cwe[0]) || '';
-  return `${f.category}|fb|${cwe}|${slug(title)}|${locationKey(f)}`;
+  return `${f.category}|fb|${cwe}|${slug(f.title ?? '')}|${locationKey(f)}`;
 }
 
 /** Pick the representative: highest severity, then confidence, then a fail over a warn. */
