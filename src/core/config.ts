@@ -52,6 +52,8 @@ export interface AppConfig {
     timeoutMs: number;
     /** Cap on endpoints handed to Nuclei per scan (bounds run time). */
     maxTargets: number;
+    /** Restrict to these template files/dirs (`-t`); empty = default set. */
+    templates: string[];
   };
   /** OWASP ZAP active-DAST integration (authorization-gated; optional daemon). */
   zap: {
@@ -149,6 +151,7 @@ export const config: AppConfig = {
     rateLimit: int('NUCLEI_RATE_LIMIT', 150),
     timeoutMs: int('NUCLEI_TIMEOUT_MS', 180_000),
     maxTargets: int('NUCLEI_MAX_TARGETS', 50),
+    templates: (process.env.NUCLEI_TEMPLATES ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   },
   zap: {
     apiUrl: process.env.ZAP_API_URL ?? '',

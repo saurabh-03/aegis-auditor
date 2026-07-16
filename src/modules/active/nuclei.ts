@@ -147,6 +147,7 @@ export const nucleiModule: ScanModule = {
       rateLimit: config.nuclei.rateLimit,
       timeoutMs: config.nuclei.timeoutMs,
       includeRequestResponse: true,
+      ...(config.nuclei.templates.length ? { templates: config.nuclei.templates } : {}),
       ...(Object.keys(authHeaders).length ? { headers: authHeaders } : {}),
       onProgress: (fraction, note) => ctx.progress(fraction, note),
       log: ctx.log,
