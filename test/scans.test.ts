@@ -65,3 +65,32 @@ test('async scan requires authentication', async () => {
   const res = await app.inject({ method: 'POST', url: '/api/scans', payload: { target: 'example.com' } });
   assert.equal(res.statusCode, 401);
 });
+
+test('authenticated-scan credentials are refused without a verified project', async () => {
+  // Ad-hoc target (no project) carrying auth → rejected.
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/scans',
+    headers: { authorization: `Bearer ${token}` },
+    payload: { target: 'example.com', authCookie: 'session=abc' },
+  });
+  assert.equal(res.statusCode, 403);
+  assert.equal(JSON.parse(res.payload).error, 'auth_requires_verified_project');
+});
+
+test('form-login to an off-site host is rejected', async () => {
+  // Create an org + project, then (without verifying) attempt is blocked by the
+  // verified-project gate first; here we assert the gate rejects auth outright.
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/scans',
+    headers: { authorization: `Bearer ${token}` },
+    payload: {
+      target: 'example.com',
+      formLogin: { loginUrl: 'https://evil.example.net/login', username: 'a', password: 'b' },
+    },
+  });
+  // No verified project → the credential gate fires before scope validation.
+  assert.equal(res.statusCode, 403);
+  assert.equal(JSON.parse(res.payload).error, 'auth_requires_verified_project');
+});

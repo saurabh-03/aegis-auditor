@@ -106,6 +106,14 @@ export interface Webhook {
 
 export type Cadence = 'daily' | 'weekly' | 'monthly';
 
+/** Optional per-scan credentials collected in the UI (never stored client-side). */
+export interface ScanAuthInput {
+  authHeaders?: Record<string, string>;
+  authCookie?: string;
+  excludeUrlPatterns?: string[];
+  formLogin?: { loginUrl: string; username: string; password: string };
+}
+
 export interface Schedule {
   id: string;
   projectId: string;

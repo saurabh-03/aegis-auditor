@@ -27,6 +27,9 @@ interface Args {
   authHeaders: Record<string, string>;
   authCookie?: string;
   exclude?: string[];
+  loginUrl?: string;
+  loginUser?: string;
+  loginPass?: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -46,6 +49,9 @@ function parseArgs(argv: string[]): Args {
       if (idx > 0) args.authHeaders[raw.slice(0, idx).trim()] = raw.slice(idx + 1).trim();
     } else if (a === '--auth-cookie') args.authCookie = argv[++i];
     else if (a === '--exclude') args.exclude = (argv[++i] ?? '').split(',').filter(Boolean);
+    else if (a === '--login-url') args.loginUrl = argv[++i];
+    else if (a === '--login-user') args.loginUser = argv[++i];
+    else if (a === '--login-pass') args.loginPass = argv[++i];
     else if (!a.startsWith('--')) args.target = a;
   }
   return args;
@@ -54,11 +60,15 @@ function parseArgs(argv: string[]): Args {
 /** Assemble ScanAuth from CLI flags, or undefined when none were supplied. */
 function buildAuth(args: Args): ScanAuth | undefined {
   const hasHeaders = Object.keys(args.authHeaders).length > 0;
-  if (!hasHeaders && !args.authCookie && !args.exclude) return undefined;
+  const hasLogin = Boolean(args.loginUrl && args.loginUser && args.loginPass);
+  if (!hasHeaders && !args.authCookie && !args.exclude && !hasLogin) return undefined;
   return {
     ...(hasHeaders ? { headers: args.authHeaders } : {}),
     ...(args.authCookie ? { cookies: args.authCookie } : {}),
     ...(args.exclude ? { excludeUrlPatterns: args.exclude } : {}),
+    ...(hasLogin
+      ? { login: { loginUrl: args.loginUrl as string, username: args.loginUser as string, password: args.loginPass as string } }
+      : {}),
   };
 }
 

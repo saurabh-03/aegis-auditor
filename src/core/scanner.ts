@@ -11,6 +11,7 @@
 import { ENGINE_VERSION, config } from './config.js';
 import { buildAuthHeaders, fetchPage, timedFetch } from './http.js';
 import { crawlSurface } from '../modules/browser/spider.js';
+import { captureSession } from '../modules/browser/login.js';
 import { scoreAll, sortFindings } from './scoring.js';
 import { assertPublicHost } from './ssrf.js';
 import type {
@@ -18,6 +19,7 @@ import type {
   AuditReport,
   ModuleResult,
   PageSnapshot,
+  ScanAuth,
   ScanContext,
   ScanModule,
   ScanOptions,
@@ -68,9 +70,26 @@ export async function runScan(
   // SSRF guard: never let a scan reach private/internal/metadata addresses.
   await assertPublicHost(target.hostname, timeoutMs);
 
+  // Resolve the effective auth. If a form-login is configured, drive the browser
+  // once to capture the session, merge its cookies, and DROP the password/login
+  // block so no module ever sees the raw credentials.
+  let effectiveAuth: ScanAuth | undefined = options.auth;
+  if (options.auth?.login) {
+    log('Authenticated scan: performing form-login to capture a session…');
+    const captured = await captureSession(options.auth.login, { timeoutMs, log });
+    const { login: _login, ...rest } = options.auth;
+    if (captured) {
+      const mergedCookies = [options.auth.cookies, captured.cookies].filter(Boolean).join('; ');
+      effectiveAuth = { ...rest, cookies: mergedCookies };
+    } else {
+      // Login failed/unavailable — proceed with any explicit header/cookie auth.
+      effectiveAuth = Object.keys(rest).length ? rest : undefined;
+    }
+  }
+
   // Authenticated-scan headers (secrets — never logged). Empty when no auth.
-  const authHeaders = buildAuthHeaders(options.auth);
-  if (options.auth) log('Authenticated scan: injecting session credentials into requests.');
+  const authHeaders = buildAuthHeaders(effectiveAuth);
+  if (effectiveAuth) log('Authenticated scan: injecting session credentials into requests.');
 
   // Single homepage fetch shared across modules.
   let pagePromise: Promise<PageSnapshot> | null = null;
@@ -94,7 +113,7 @@ export async function runScan(
         respectRobots: config.crawl.respectRobots,
         timeoutMs,
         authHeaders,
-        ...(options.auth?.excludeUrlPatterns ? { excludeUrlPatterns: options.auth.excludeUrlPatterns } : {}),
+        ...(effectiveAuth?.excludeUrlPatterns ? { excludeUrlPatterns: effectiveAuth.excludeUrlPatterns } : {}),
         log,
       });
     }
@@ -113,7 +132,8 @@ export async function runScan(
     // ctx.fetch injects auth headers (call-site init.headers win on conflict).
     fetch: (url, init) =>
       timedFetch(url, timeoutMs, { ...init, headers: { ...authHeaders, ...(init?.headers as Record<string, string>) } }),
-    ...(options.auth ? { auth: options.auth } : {}),
+    // Modules see the effective auth (captured session merged, password dropped).
+    ...(effectiveAuth ? { auth: effectiveAuth } : {}),
   };
 
   const { eligible, skippedActive } = selectModules(modules, options);

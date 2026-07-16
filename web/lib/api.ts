@@ -67,7 +67,15 @@ export const api = {
   projectHistory: (projectId: string) => req<{ history: { id: string; createdAt: string; score: number }[] }>(`/api/projects/${projectId}/history`),
 
   // async scans
-  enqueueScan: (body: { target?: string; projectId?: string; includeActive?: boolean }) =>
+  enqueueScan: (body: {
+    target?: string;
+    projectId?: string;
+    includeActive?: boolean;
+    authHeaders?: Record<string, string>;
+    authCookie?: string;
+    excludeUrlPatterns?: string[];
+    formLogin?: { loginUrl: string; username: string; password: string };
+  }) =>
     req<{ scanId: string; status: string; stream: string }>('/api/scans', { method: 'POST', body: JSON.stringify(body) }),
   scanStatus: (id: string) => req<{ status: string; report: AuditReport | null; overall: number | null; grade: string | null }>(`/api/scans/${id}`),
 

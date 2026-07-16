@@ -147,6 +147,24 @@ export interface ScanModule {
 }
 
 /**
+ * Automated form-login: drive a real browser to submit a login form and capture
+ * the resulting session, so the scan can authenticate from a username/password
+ * instead of a hand-copied cookie/token. Requires the optional browser engine.
+ */
+export interface FormLogin {
+  /** URL of the page containing the login form. */
+  loginUrl: string;
+  username: string;
+  password: string;
+  /** CSS selector for the username field (default: heuristic guess). */
+  usernameSelector?: string;
+  /** CSS selector for the password field (default: `input[type=password]`). */
+  passwordSelector?: string;
+  /** CSS selector for the submit control (default: heuristic guess). */
+  submitSelector?: string;
+}
+
+/**
  * Credentials for an authenticated scan. Lets the crawler and active modules
  * reach past a login wall so logged-in surface is tested, not just the public
  * shell.
@@ -165,6 +183,11 @@ export interface ScanAuth {
    * anywhere in the absolute URL; defaults (logout/signout/…) are always added.
    */
   excludeUrlPatterns?: string[];
+  /**
+   * Automated form-login. When present, the engine performs the login once
+   * before crawling and merges the captured session into the auth above.
+   */
+  login?: FormLogin;
 }
 
 /** Options that shape a scan. */
