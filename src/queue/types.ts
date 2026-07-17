@@ -15,16 +15,20 @@ export interface ScanJob {
   userId: string | null;
 }
 
-export type ProgressType = 'queued' | 'running' | 'module' | 'completed' | 'failed';
+export type ProgressType = 'queued' | 'running' | 'module' | 'module-progress' | 'completed' | 'failed';
 
 export interface ProgressEvent {
   scanId: string;
   type: ProgressType;
-  /** 0..1 fraction of modules finished (for progress bars). */
+  /** 0..1 overall fraction (for the main progress bar). */
   progress?: number;
-  /** Module name for `type: "module"` events. */
+  /** Module name for `type: "module"` and `"module-progress"` events. */
   module?: string;
   moduleOk?: boolean;
+  /** For `type: "module-progress"`: 0..1 within the current module. */
+  moduleProgress?: number;
+  /** For `type: "module-progress"`: short human label, e.g. "20/50 endpoints". */
+  note?: string;
   /** Present on `completed`. */
   overall?: number;
   grade?: string;

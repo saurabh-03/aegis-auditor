@@ -19,7 +19,11 @@ export function LiveProgress({ state }: { state: ScanStreamState }) {
         />
       </div>
       <div className="mt-2 h-5 font-mono text-xs text-mute">
-        {state.status === 'failed' ? `✗ ${state.error ?? 'failed'}` : state.lastModule ? `▸ ${state.lastModule}` : 'starting…'}
+        {state.status === 'failed'
+          ? `✗ ${state.error ?? 'failed'}`
+          : state.lastModule
+          ? `▸ ${state.lastModule}${state.moduleNote ? ` · ${state.moduleNote}` : ''}`
+          : 'starting…'}
       </div>
     </div>
   );

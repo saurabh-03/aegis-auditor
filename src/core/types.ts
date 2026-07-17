@@ -49,6 +49,24 @@ export type FindingStatus = 'pass' | 'warn' | 'fail' | 'info';
 export type Probability = 'low' | 'medium' | 'high';
 
 /**
+ * How sure the engine is that a finding is real. Passive checks are effectively
+ * `confirmed` (they observe a fact); active scanners (ZAP/Nuclei) range from a
+ * template match (`tentative`/`firm`) to a verified exploit (`confirmed`).
+ */
+export type Confidence = 'tentative' | 'firm' | 'confirmed';
+
+/**
+ * WHERE a finding was observed. Passive, site-wide findings omit this; active
+ * per-endpoint findings carry it so the report and the regression-diff engine
+ * can track "this issue on this endpoint" over time.
+ */
+export interface FindingLocation {
+  url: string;
+  param?: string;
+  method?: string;
+}
+
+/**
  * A fully-explained audit finding. This is the atomic unit of a report.
  *
  * Passive modules must be able to populate every field from evidence they
@@ -76,8 +94,21 @@ export interface Finding {
   probability: Probability;
   /** CVE identifiers when a specific vulnerable component/version is matched. */
   cve?: string[];
+  /** CWE weakness identifiers, e.g. `CWE-79`. Populated by active scanners. */
+  cwe?: string[];
   /** OWASP category mappings, e.g. `A05:2021-Security Misconfiguration`. */
   owasp?: string[];
+  /** Engine confidence; defaults to `confirmed` for passive fact-based checks. */
+  confidence?: Confidence;
+  /**
+   * Modules that independently reported this issue, set by the finding-quality
+   * pass when duplicates are merged. ≥2 distinct engines raises confidence.
+   */
+  corroboratedBy?: string[];
+  /** Endpoint/parameter the finding was observed at (active findings). */
+  location?: FindingLocation;
+  /** Captured request/response evidence for triage (active findings). */
+  requestResponse?: { request: string; response: string };
   /** Concrete remediation guidance. */
   remediation: string;
   /** Human estimate of engineering effort, e.g. "15 minutes", "0.5 day". */
@@ -120,6 +151,50 @@ export interface ScanModule {
   run(ctx: ScanContext): Promise<ModuleResult>;
 }
 
+/**
+ * Automated form-login: drive a real browser to submit a login form and capture
+ * the resulting session, so the scan can authenticate from a username/password
+ * instead of a hand-copied cookie/token. Requires the optional browser engine.
+ */
+export interface FormLogin {
+  /** URL of the page containing the login form. */
+  loginUrl: string;
+  username: string;
+  password: string;
+  /** CSS selector for the username field (default: heuristic guess). */
+  usernameSelector?: string;
+  /** CSS selector for the password field (default: `input[type=password]`). */
+  passwordSelector?: string;
+  /** CSS selector for the submit control (default: heuristic guess). */
+  submitSelector?: string;
+}
+
+/**
+ * Credentials for an authenticated scan. Lets the crawler and active modules
+ * reach past a login wall so logged-in surface is tested, not just the public
+ * shell.
+ *
+ * SECURITY: these are secrets. They are used only in-flight to authenticate
+ * outbound requests — they must never be written into findings, evidence, the
+ * persisted report, or logs. The engine treats them as write-only.
+ */
+export interface ScanAuth {
+  /** Extra request headers, e.g. `{ Authorization: "Bearer …" }`. */
+  headers?: Record<string, string>;
+  /** Raw Cookie header value, e.g. `"session=abc; theme=dark"`. */
+  cookies?: string;
+  /**
+   * URL substrings the crawler must never follow — logout-avoidance. Matched
+   * anywhere in the absolute URL; defaults (logout/signout/…) are always added.
+   */
+  excludeUrlPatterns?: string[];
+  /**
+   * Automated form-login. When present, the engine performs the login once
+   * before crawling and merges the captured session into the auth above.
+   */
+  login?: FormLogin;
+}
+
 /** Options that shape a scan. */
 export interface ScanOptions {
   /**
@@ -135,6 +210,8 @@ export interface ScanOptions {
   includeActive?: boolean;
   /** Per-request timeout in ms for network calls. */
   timeoutMs?: number;
+  /** Credentials for an authenticated scan (never persisted; see {@link ScanAuth}). */
+  auth?: ScanAuth;
 }
 
 /** Snapshot of the target's homepage fetched once and shared by modules. */
@@ -157,16 +234,88 @@ export interface RedirectHop {
   location: string;
 }
 
+/**
+ * A single injectable request surface discovered by the crawler: a URL plus the
+ * method and parameter names an active tester (ZAP/Nuclei) would fuzz.
+ */
+export interface Endpoint {
+  /** Absolute, normalized URL (query string preserved for GET params). */
+  url: string;
+  method: 'GET' | 'POST';
+  /** Names of query- and body-parameters observed for this endpoint. */
+  params: string[];
+  /** How the endpoint was discovered. */
+  source: 'seed' | 'link' | 'form' | 'xhr' | 'sitemap';
+  /** Response content-type when known (e.g. `text/html`, `application/json`). */
+  contentType?: string;
+}
+
+/** An HTML form discovered during the crawl. */
+export interface DiscoveredForm {
+  /** Absolute action URL the form submits to. */
+  action: string;
+  method: 'GET' | 'POST';
+  /** Names of the form's input/select/textarea controls. */
+  inputs: string[];
+  /** URL of the page the form was found on. */
+  foundOn: string;
+  /** True when a CSRF-token-looking hidden field is present. */
+  hasCsrfToken: boolean;
+}
+
+/**
+ * The shared attack-surface map produced once per scan by the crawler and
+ * consumed by later modules (passive coverage checks now; active ZAP/Nuclei
+ * modules in Phase B). Mirrors the single-fetch {@link PageSnapshot} pattern:
+ * built lazily and cached so the crawl happens at most once.
+ */
+export interface AttackSurface {
+  /** Deduplicated injectable endpoints, in discovery order. */
+  endpoints: Endpoint[];
+  /** Forms discovered across crawled pages. */
+  forms: DiscoveredForm[];
+  /** In-scope hosts encountered (the seed host plus same-site subdomains). */
+  discoveredHosts: string[];
+  /** URLs that were in-links but out of scope (off-site / blocked). */
+  offScopeUrls: string[];
+  /** Number of pages actually fetched/rendered. */
+  crawledCount: number;
+  /** True if a page/depth cap stopped the crawl before exhaustion. */
+  truncated: boolean;
+  /** True when a real browser rendered pages; false for the HTTP-only fallback. */
+  renderedWithBrowser: boolean;
+}
+
 /** Shared context passed to every module. */
 export interface ScanContext {
   target: URL;
   options: Required<Pick<ScanOptions, 'authorized' | 'timeoutMs'>> & ScanOptions;
   now: Date;
   log: (msg: string) => void;
+  /**
+   * Report intra-module progress (0..1) for long-running modules (active DAST).
+   * Best-effort and optional: modules that finish quickly need not call it, and
+   * the fraction is clamped. `note` is a short human label (e.g. "40% · 20/50").
+   */
+  progress(fraction: number, note?: string): void;
   /** Cached homepage fetch; first caller triggers the network request. */
   getPage(): Promise<PageSnapshot>;
-  /** Generic fetch helper honoring the scan timeout. */
+  /**
+   * Cached attack-surface crawl; first caller triggers the crawl. Shared by all
+   * modules so the site is crawled at most once per scan.
+   */
+  getSurface(): Promise<AttackSurface>;
+  /**
+   * Generic fetch helper honoring the scan timeout. When the scan carries
+   * {@link ScanAuth}, auth headers/cookies are injected automatically.
+   */
   fetch(url: string, init?: RequestInit): Promise<Response>;
+  /**
+   * Authenticated-scan credentials, if any. Active modules read this to pass
+   * auth to their engines (Nuclei `-H`, ZAP replacer). Write-only — never copy
+   * into findings or logs.
+   */
+  auth?: ScanAuth;
 }
 
 /** Aggregate score for one category. */
@@ -195,5 +344,11 @@ export interface AuditReport {
   meta: {
     engineVersion: string;
     passiveOnly: boolean;
+    /** Duplicate findings collapsed by the finding-quality pass. */
+    mergedDuplicates?: number;
+    /** Findings re-verified as still reproducing (active replay). */
+    replayReproduced?: number;
+    /** Findings demoted because a replay did not reproduce them. */
+    replayContradicted?: number;
   };
 }

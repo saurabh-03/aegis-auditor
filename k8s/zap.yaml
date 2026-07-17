@@ -1,0 +1,64 @@
+# OWASP ZAP daemon — active-scan engine for the worker(s).
+#
+# Active DAST is authorization-gated and heavy; it runs off the worker, never
+# the API. The worker reaches ZAP at http://aegis-zap:8080 (ZAP_API_URL in the
+# ConfigMap). This is a cluster-internal Service only — never expose it publicly.
+#
+# The API key lives in aegis-secrets (ZAP_API_KEY). The daemon reads it via the
+# entrypoint below; the worker sends it as the `apikey` param.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-zap
+  namespace: aegis
+  labels: { app: aegis-zap }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: aegis-zap } }
+  template:
+    metadata: { labels: { app: aegis-zap } }
+    spec:
+      containers:
+        - name: zap
+          image: ghcr.io/zaproxy/zaproxy:stable
+          command: ["zap.sh"]
+          args:
+            - "-daemon"
+            - "-host"
+            - "0.0.0.0"
+            - "-port"
+            - "8080"
+            - "-config"
+            - "api.key=$(ZAP_API_KEY)"
+            - "-config"
+            - "api.addrs.addr.name=.*"
+            - "-config"
+            - "api.addrs.addr.regex=true"
+          env:
+            - name: ZAP_API_KEY
+              valueFrom:
+                secretKeyRef: { name: aegis-secrets, key: ZAP_API_KEY }
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: "/JSON/core/view/version/", port: 8080 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            # ZAP is memory-hungry during active scans.
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits: { cpu: "2", memory: "2Gi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-zap
+  namespace: aegis
+  labels: { app: aegis-zap }
+spec:
+  selector: { app: aegis-zap }
+  ports:
+    - port: 8080
+      targetPort: 8080
+  # ClusterIP only — internal to the worker, never internet-facing.
+  type: ClusterIP

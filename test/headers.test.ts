@@ -19,6 +19,15 @@ function ctxWithHeaders(headers: Record<string, string>): ScanContext {
     options: { authorized: false, timeoutMs: 5000 },
     log: () => {},
     getPage: async () => page,
+    getSurface: async () => ({
+      endpoints: [],
+      forms: [],
+      discoveredHosts: ['example.com'],
+      offScopeUrls: [],
+      crawledCount: 0,
+      truncated: false,
+      renderedWithBrowser: false,
+    }),
     fetch: async () => new Response('', { status: 200 }),
   };
 }

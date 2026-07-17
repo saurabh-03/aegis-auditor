@@ -9,13 +9,19 @@
  */
 
 import { ENGINE_VERSION, config } from './config.js';
-import { fetchPage, timedFetch } from './http.js';
+import { buildAuthHeaders, fetchPage, timedFetch } from './http.js';
+import { crawlSurface } from '../modules/browser/spider.js';
+import { captureSession } from '../modules/browser/login.js';
 import { scoreAll, sortFindings } from './scoring.js';
+import { refineFindings } from './quality.js';
+import { replayFindings } from './replay.js';
 import { assertPublicHost } from './ssrf.js';
 import type {
+  AttackSurface,
   AuditReport,
   ModuleResult,
   PageSnapshot,
+  ScanAuth,
   ScanContext,
   ScanModule,
   ScanOptions,
@@ -24,6 +30,8 @@ import type {
 export interface ScanEvents {
   onModuleStart?: (module: ScanModule) => void;
   onModuleFinish?: (result: ModuleResult) => void;
+  /** Intra-module progress for long-running modules; fraction is 0..1. */
+  onModuleProgress?: (module: ScanModule, fraction: number, note?: string) => void;
   onLog?: (msg: string) => void;
 }
 
@@ -64,14 +72,54 @@ export async function runScan(
   // SSRF guard: never let a scan reach private/internal/metadata addresses.
   await assertPublicHost(target.hostname, timeoutMs);
 
+  // Resolve the effective auth. If a form-login is configured, drive the browser
+  // once to capture the session, merge its cookies, and DROP the password/login
+  // block so no module ever sees the raw credentials.
+  let effectiveAuth: ScanAuth | undefined = options.auth;
+  if (options.auth?.login) {
+    log('Authenticated scan: performing form-login to capture a session…');
+    const captured = await captureSession(options.auth.login, { timeoutMs, log });
+    const { login: _login, ...rest } = options.auth;
+    if (captured) {
+      const mergedCookies = [options.auth.cookies, captured.cookies].filter(Boolean).join('; ');
+      effectiveAuth = { ...rest, cookies: mergedCookies };
+    } else {
+      // Login failed/unavailable — proceed with any explicit header/cookie auth.
+      effectiveAuth = Object.keys(rest).length ? rest : undefined;
+    }
+  }
+
+  // Authenticated-scan headers (secrets — never logged). Empty when no auth.
+  const authHeaders = buildAuthHeaders(effectiveAuth);
+  if (effectiveAuth) log('Authenticated scan: injecting session credentials into requests.');
+
   // Single homepage fetch shared across modules.
   let pagePromise: Promise<PageSnapshot> | null = null;
   const getPage = () => {
     if (!pagePromise) {
       log(`Fetching ${target.toString()} …`);
-      pagePromise = fetchPage(target.toString(), timeoutMs);
+      pagePromise = fetchPage(target.toString(), timeoutMs, 8, authHeaders);
     }
     return pagePromise;
+  };
+
+  // Single attack-surface crawl shared across modules (built on first request).
+  let surfacePromise: Promise<AttackSurface> | null = null;
+  const getSurface = () => {
+    if (!surfacePromise) {
+      log(`Crawling ${target.toString()} …`);
+      surfacePromise = crawlSurface(target, {
+        maxPages: config.crawl.maxPages,
+        maxDepth: config.crawl.maxDepth,
+        renderJs: config.crawl.renderJs,
+        respectRobots: config.crawl.respectRobots,
+        timeoutMs,
+        authHeaders,
+        ...(effectiveAuth?.excludeUrlPatterns ? { excludeUrlPatterns: effectiveAuth.excludeUrlPatterns } : {}),
+        log,
+      });
+    }
+    return surfacePromise;
   };
 
   const ctx: ScanContext = {
@@ -79,8 +127,15 @@ export async function runScan(
     now: new Date(),
     options: { ...options, authorized: options.authorized, timeoutMs },
     log,
+    // Base no-op; each module gets a progress fn bound to its own name below.
+    progress: () => {},
     getPage,
-    fetch: (url, init) => timedFetch(url, timeoutMs, init),
+    getSurface,
+    // ctx.fetch injects auth headers (call-site init.headers win on conflict).
+    fetch: (url, init) =>
+      timedFetch(url, timeoutMs, { ...init, headers: { ...authHeaders, ...(init?.headers as Record<string, string>) } }),
+    // Modules see the effective auth (captured session merged, password dropped).
+    ...(effectiveAuth ? { auth: effectiveAuth } : {}),
   };
 
   const { eligible, skippedActive } = selectModules(modules, options);
@@ -93,8 +148,17 @@ export async function runScan(
     eligible.map(async (m): Promise<ModuleResult> => {
       events.onModuleStart?.(m);
       const t0 = performance.now();
+      // Per-module context: progress is bound to this module's name. Everything
+      // else (getPage/getSurface/fetch) is shared via the base ctx closures.
+      const mctx: ScanContext = {
+        ...ctx,
+        progress: (fraction, note) => {
+          const clamped = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
+          events.onModuleProgress?.(m, clamped, note);
+        },
+      };
       try {
-        const r = await m.run(ctx);
+        const r = await m.run(mctx);
         events.onModuleFinish?.(r);
         return r;
       } catch (err) {
@@ -112,7 +176,26 @@ export async function runScan(
     }),
   );
 
-  const findings = sortFindings(results.flatMap((r) => r.findings));
+  // Finding-quality pass: collapse duplicate/corroborating findings BEFORE
+  // scoring so per-endpoint noise doesn't over-penalize the score.
+  const refined = refineFindings(results.flatMap((r) => r.findings));
+
+  // Active finding replay: on an active scan, re-verify cheaply-checkable
+  // findings so confirmed issues are marked `confirmed` and false positives are
+  // demoted out of the score. Runs on the deduped set (once per issue).
+  let effectiveFindings = refined.findings;
+  let replayStats: { reproduced: number; contradicted: number; skipped: number } | null = null;
+  if (options.authorized && options.includeActive && config.replay.enabled) {
+    const rep = await replayFindings(refined.findings, (u) => ctx.fetch(u, { redirect: 'follow' }), {
+      targetOrigin: target.origin,
+      log,
+    });
+    effectiveFindings = rep.findings;
+    replayStats = { reproduced: rep.reproduced, contradicted: rep.contradicted, skipped: rep.skipped };
+    if (rep.contradicted) log(`Replay demoted ${rep.contradicted} unreproduced finding(s).`);
+  }
+
+  const findings = sortFindings(effectiveFindings);
   const { categories, overall } = scoreAll(findings);
 
   const data: Record<string, Record<string, unknown> | undefined> = {};
@@ -137,6 +220,10 @@ export async function runScan(
     meta: {
       engineVersion: ENGINE_VERSION,
       passiveOnly: !(options.authorized && options.includeActive),
+      mergedDuplicates: refined.merged,
+      ...(replayStats
+        ? { replayReproduced: replayStats.reproduced, replayContradicted: replayStats.contradicted }
+        : {}),
     },
   };
 

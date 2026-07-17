@@ -106,6 +106,14 @@ export interface Webhook {
 
 export type Cadence = 'daily' | 'weekly' | 'monthly';
 
+/** Optional per-scan credentials collected in the UI (never stored client-side). */
+export interface ScanAuthInput {
+  authHeaders?: Record<string, string>;
+  authCookie?: string;
+  excludeUrlPatterns?: string[];
+  formLogin?: { loginUrl: string; username: string; password: string };
+}
+
 export interface Schedule {
   id: string;
   projectId: string;
@@ -158,10 +166,14 @@ export interface RegressionAssessment {
 
 export interface ProgressEvent {
   scanId: string;
-  type: 'queued' | 'running' | 'module' | 'completed' | 'failed';
+  type: 'queued' | 'running' | 'module' | 'module-progress' | 'completed' | 'failed';
   progress?: number;
   module?: string;
   moduleOk?: boolean;
+  /** Fraction (0..1) within the current module, for `module-progress`. */
+  moduleProgress?: number;
+  /** Short label for `module-progress`, e.g. "40% · 20/50 req". */
+  note?: string;
   overall?: number;
   grade?: string;
   error?: string;

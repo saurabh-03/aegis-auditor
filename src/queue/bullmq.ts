@@ -15,6 +15,7 @@ import { Queue as BullQueue, Worker, type Job } from 'bullmq';
 import IORedis, { type Redis } from 'ioredis';
 import type { Store } from '../store/types.js';
 import { processScanJob } from './runner.js';
+import { readSecret, splitJobSecret, stashSecret } from './secrets.js';
 import type { ProgressEvent, ProgressListener, Queue, ScanJob } from './types.js';
 
 const QUEUE_NAME = 'scans';
@@ -67,7 +68,11 @@ export class BullMqQueue implements Queue {
       this.worker = new Worker(
         QUEUE_NAME,
         async (job: Job) => {
-          await processScanJob(job.data as ScanJob, this.store, (e) => {
+          const data = job.data as ScanJob;
+          // Reattach transient credentials (kept out of the persisted job).
+          const auth = await readSecret(this.pub, data.scanId);
+          if (auth) data.options = { ...data.options, auth };
+          await processScanJob(data, this.store, (e) => {
             void this.pub.publish(CHANNEL, JSON.stringify(e));
           });
         },
@@ -87,7 +92,13 @@ export class BullMqQueue implements Queue {
   async enqueue(job: ScanJob): Promise<void> {
     const queued: ProgressEvent = { scanId: job.scanId, type: 'queued', progress: 0, at: new Date().toISOString() };
     await this.pub.publish(CHANNEL, JSON.stringify(queued));
-    await this.queue.add('scan', job, {
+
+    // Keep credentials OUT of the persisted job: BullMQ retains completed/failed
+    // jobs in Redis. Stash the secret under a short-TTL key the worker reads back.
+    const { sanitized, auth } = splitJobSecret(job);
+    if (auth) await stashSecret(this.pub, job.scanId, auth);
+
+    await this.queue.add('scan', sanitized, {
       jobId: job.scanId,
       attempts: 2,
       backoff: { type: 'exponential', delay: 2000 },

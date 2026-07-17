@@ -3,7 +3,7 @@
 import type { ScanModule } from '../core/types.js';
 import { cookiesModule } from './cookies.js';
 import { corsModule } from './cors.js';
-import { crawlModule } from './crawl.js';
+import { robotsModule } from './robots.js';
 import { cspModule } from './csp.js';
 import { dependenciesModule } from './dependencies.js';
 import { dnsModule } from './dns.js';
@@ -14,11 +14,14 @@ import { jsSecurityModule } from './jssecurity.js';
 import { performanceModule } from './performance.js';
 import { scalabilityModule } from './scalability.js';
 import { seoModule } from './seo.js';
+import { spiderModule } from './spider.js';
 import { sslModule } from './ssl.js';
 import { techModule } from './tech.js';
 import { webVitalsModule } from './webvitals.js';
 import { portsModule } from './active/ports.js';
 import { exposureModule } from './active/exposure.js';
+import { nucleiModule } from './active/nuclei.js';
+import { zapModule } from './active/zap.js';
 
 /** All modules, passive first then active. Order is display-only. */
 export const ALL_MODULES: ScanModule[] = [
@@ -35,7 +38,8 @@ export const ALL_MODULES: ScanModule[] = [
   webVitalsModule,
   imagesModule,
   jsSecurityModule,
-  crawlModule,
+  robotsModule,
+  spiderModule,
   seoModule,
   scalabilityModule,
   // TODO(aegis:module): register new passive checks here (SRI coverage, mixed
@@ -44,6 +48,8 @@ export const ALL_MODULES: ScanModule[] = [
   // Active (authorization-gated):
   portsModule,
   exposureModule,
+  nucleiModule,
+  zapModule,
 ];
 
 export const PASSIVE_MODULES = ALL_MODULES.filter((m) => m.mode === 'passive');

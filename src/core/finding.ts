@@ -1,6 +1,14 @@
 /** Helpers for constructing well-formed {@link Finding} objects. */
 
-import type { Category, Finding, FindingStatus, Probability, Severity } from './types.js';
+import type {
+  Category,
+  Confidence,
+  Finding,
+  FindingLocation,
+  FindingStatus,
+  Probability,
+  Severity,
+} from './types.js';
 
 export interface FindingInput {
   id: string;
@@ -17,7 +25,11 @@ export interface FindingInput {
   remediation: string;
   estimatedFixTime: string;
   cve?: string[];
+  cwe?: string[];
   owasp?: string[];
+  confidence?: Confidence;
+  location?: FindingLocation;
+  requestResponse?: { request: string; response: string };
   exampleCode?: string;
   references?: string[];
   evidence?: Record<string, unknown>;

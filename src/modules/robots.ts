@@ -3,12 +3,12 @@
 import { finding, pass } from '../core/finding.js';
 import type { Finding, ModuleResult, ScanContext, ScanModule } from '../core/types.js';
 
-const MODULE = 'crawl';
+const MODULE = 'robots';
 
 /** Disallowed paths that hint at sensitive areas worth reviewing (not fetched). */
 const SENSITIVE_HINTS = /admin|login|wp-admin|backup|\.git|\.env|config|staging|internal|private|api\/v/i;
 
-export const crawlModule: ScanModule = {
+export const robotsModule: ScanModule = {
   name: MODULE,
   title: 'Robots & Sitemap',
   category: 'seo',
@@ -28,12 +28,12 @@ export const crawlModule: ScanModule = {
       const disallows = [...robots.matchAll(/^\s*Disallow:\s*(\S+)/gim)].map((m) => m[1] ?? '');
       const sensitive = disallows.filter((p) => SENSITIVE_HINTS.test(p));
 
-      findings.push(pass(MODULE, 'seo', 'crawl.robots.present', 'robots.txt is present', `${disallows.length} Disallow rule(s) found.`, { disallows }));
+      findings.push(pass(MODULE, 'seo', 'robots.present', 'robots.txt is present', `${disallows.length} Disallow rule(s) found.`, { disallows }));
 
       if (sensitive.length > 0) {
         findings.push(
           finding({
-            id: 'crawl.robots.sensitive',
+            id: 'robots.sensitive',
             module: MODULE,
             category: 'security',
             title: 'robots.txt discloses sensitive-looking paths',
@@ -57,7 +57,7 @@ export const crawlModule: ScanModule = {
       if (!/Sitemap:/i.test(robots)) {
         findings.push(
           finding({
-            id: 'crawl.robots.no-sitemap-ref',
+            id: 'robots.no-sitemap-ref',
             module: MODULE,
             category: 'seo',
             title: 'robots.txt does not reference a sitemap',
@@ -77,7 +77,7 @@ export const crawlModule: ScanModule = {
     } else {
       findings.push(
         finding({
-          id: 'crawl.robots.missing',
+          id: 'robots.missing',
           module: MODULE,
           category: 'seo',
           title: 'No robots.txt found',
@@ -102,12 +102,12 @@ export const crawlModule: ScanModule = {
       const urls = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1] ?? '');
       data.sitemapUrlCount = urls.length;
       const staging = urls.filter((u) => /staging|dev\.|test\.|\.local|preprod/i.test(u));
-      findings.push(pass(MODULE, 'seo', 'crawl.sitemap.present', 'sitemap.xml is present', `${urls.length} URL(s) listed.`, { count: urls.length }));
+      findings.push(pass(MODULE, 'seo', 'robots.sitemap.present', 'sitemap.xml is present', `${urls.length} URL(s) listed.`, { count: urls.length }));
 
       if (staging.length > 0) {
         findings.push(
           finding({
-            id: 'crawl.sitemap.staging',
+            id: 'robots.sitemap.staging',
             module: MODULE,
             category: 'security',
             title: 'Sitemap exposes staging/development URLs',
@@ -129,7 +129,7 @@ export const crawlModule: ScanModule = {
     } else {
       findings.push(
         finding({
-          id: 'crawl.sitemap.missing',
+          id: 'robots.sitemap.missing',
           module: MODULE,
           category: 'seo',
           title: 'No sitemap.xml found',

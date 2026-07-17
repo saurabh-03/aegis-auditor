@@ -34,6 +34,11 @@ services:
       AEGIS_ROLE: "worker"
       SCAN_CONCURRENCY: "4"
       JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+      # Active DAST (authorization-gated) runs on the worker, never the API.
+      # Empty by default → the ZAP module degrades to an info finding. Set
+      # ZAP_API_URL=http://zap:8080 and start the `active` profile to enable it.
+      ZAP_API_URL: "${ZAP_API_URL:-}"
+      ZAP_API_KEY: "${ZAP_API_KEY:-aegis-zap}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,6 +46,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
     # Scale out with: docker compose up --scale worker=3
+
+  # OWASP ZAP daemon — active-scan engine for the worker. Opt-in: it's heavy, so
+  # it only starts under the `active` profile:
+  #   ZAP_API_URL=http://zap:8080 docker compose --profile active up
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    profiles: ["active"]
+    command: >
+      zap.sh -daemon -host 0.0.0.0 -port 8080
+      -config api.key=${ZAP_API_KEY:-aegis-zap}
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+    expose:
+      - "8080"
+    restart: unless-stopped
 
   web:
     build:

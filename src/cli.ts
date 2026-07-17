@@ -6,11 +6,13 @@
  *   npm run scan -- example.com --format md
  *   npm run scan -- example.com --active --authorized   (intrusive; owner only)
  *   npm run scan -- example.com --only ssl,security-headers
+ *   npm run scan -- example.com --active --authorized \
+ *     --auth-header "Authorization: Bearer <token>" --auth-cookie "session=<id>"
  */
 
 import { normalizeTarget } from './core/http.js';
 import { runScan } from './core/scanner.js';
-import type { ScanOptions } from './core/types.js';
+import type { ScanAuth, ScanOptions } from './core/types.js';
 import { ALL_MODULES } from './modules/registry.js';
 import { toMarkdown } from './report/markdown.js';
 import { summarize } from './core/scoring.js';
@@ -22,10 +24,16 @@ interface Args {
   authorized: boolean;
   only?: string[];
   skip?: string[];
+  authHeaders: Record<string, string>;
+  authCookie?: string;
+  exclude?: string[];
+  loginUrl?: string;
+  loginUser?: string;
+  loginPass?: string;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { target: '', format: 'summary', active: false, authorized: false };
+  const args: Args = { target: '', format: 'summary', active: false, authorized: false, authHeaders: {} };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!a) continue;
@@ -34,9 +42,34 @@ function parseArgs(argv: string[]): Args {
     else if (a === '--authorized') args.authorized = true;
     else if (a === '--only') args.only = (argv[++i] ?? '').split(',').filter(Boolean);
     else if (a === '--skip') args.skip = (argv[++i] ?? '').split(',').filter(Boolean);
+    else if (a === '--auth-header') {
+      // "Name: value" — split on the first colon only.
+      const raw = argv[++i] ?? '';
+      const idx = raw.indexOf(':');
+      if (idx > 0) args.authHeaders[raw.slice(0, idx).trim()] = raw.slice(idx + 1).trim();
+    } else if (a === '--auth-cookie') args.authCookie = argv[++i];
+    else if (a === '--exclude') args.exclude = (argv[++i] ?? '').split(',').filter(Boolean);
+    else if (a === '--login-url') args.loginUrl = argv[++i];
+    else if (a === '--login-user') args.loginUser = argv[++i];
+    else if (a === '--login-pass') args.loginPass = argv[++i];
     else if (!a.startsWith('--')) args.target = a;
   }
   return args;
+}
+
+/** Assemble ScanAuth from CLI flags, or undefined when none were supplied. */
+function buildAuth(args: Args): ScanAuth | undefined {
+  const hasHeaders = Object.keys(args.authHeaders).length > 0;
+  const hasLogin = Boolean(args.loginUrl && args.loginUser && args.loginPass);
+  if (!hasHeaders && !args.authCookie && !args.exclude && !hasLogin) return undefined;
+  return {
+    ...(hasHeaders ? { headers: args.authHeaders } : {}),
+    ...(args.authCookie ? { cookies: args.authCookie } : {}),
+    ...(args.exclude ? { excludeUrlPatterns: args.exclude } : {}),
+    ...(hasLogin
+      ? { login: { loginUrl: args.loginUrl as string, username: args.loginUser as string, password: args.loginPass as string } }
+      : {}),
+  };
 }
 
 const COLOR = {
@@ -58,7 +91,10 @@ function bar(score: number): string {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.target) {
-    console.error('Usage: npm run scan -- <target> [--format summary|json|md] [--active --authorized] [--only a,b] [--skip c]');
+    console.error(
+      'Usage: npm run scan -- <target> [--format summary|json|md] [--active --authorized] [--only a,b] [--skip c]\n' +
+        '                 [--auth-header "Name: value"] [--auth-cookie "k=v; …"] [--exclude /logout,/admin]',
+    );
     process.exit(1);
   }
 
@@ -69,12 +105,15 @@ async function main() {
   }
 
   const target = normalizeTarget(args.target);
+  const auth = buildAuth(args);
   const options: ScanOptions = {
     authorized: args.authorized,
     includeActive: args.active,
     ...(args.only ? { only: args.only } : {}),
     ...(args.skip ? { skip: args.skip } : {}),
+    ...(auth ? { auth } : {}),
   };
+  if (auth) console.error(`${COLOR.cyan}Authenticated scan: credentials will be sent with requests (never stored in the report).${COLOR.reset}`);
 
   console.error(`${COLOR.cyan}Scanning ${target.toString()} …${COLOR.reset}`);
   const report = await runScan(target, ALL_MODULES, options, {

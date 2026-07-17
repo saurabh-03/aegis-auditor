@@ -1,5 +1,7 @@
 /** Runtime configuration, environment-driven with safe defaults. */
 
+import type { NucleiSeverity } from '../integrations/nuclei.js';
+
 export const ENGINE_VERSION = '0.1.0';
 
 export interface AppConfig {
@@ -27,6 +29,48 @@ export interface AppConfig {
     /** 'mobile' | 'desktop' form factor for the emulated viewport. */
     formFactor: 'mobile' | 'desktop';
   };
+  /** Attack-surface crawler (feeds the spider module and, later, active DAST). */
+  crawl: {
+    /** Max pages fetched/rendered per scan. */
+    maxPages: number;
+    /** Max link depth from the seed. */
+    maxDepth: number;
+    /** Render pages in a real browser (needs Puppeteer; HTTP fallback otherwise). */
+    renderJs: boolean;
+    /** Honor robots.txt Disallow rules while crawling. */
+    respectRobots: boolean;
+  };
+  /** Nuclei active-DAST integration (authorization-gated; optional binary). */
+  nuclei: {
+    /** Binary name/path (`NUCLEI_BIN`); the adapter degrades if it's absent. */
+    binaryPath: string;
+    /** Severity floor sent to Nuclei's `-severity` filter. */
+    severities: NucleiSeverity[];
+    /** Requests-per-second cap. */
+    rateLimit: number;
+    /** Hard kill timeout for the whole Nuclei run. */
+    timeoutMs: number;
+    /** Cap on endpoints handed to Nuclei per scan (bounds run time). */
+    maxTargets: number;
+    /** Restrict to these template files/dirs (`-t`); empty = default set. */
+    templates: string[];
+  };
+  /** OWASP ZAP active-DAST integration (authorization-gated; optional daemon). */
+  zap: {
+    /** Daemon base URL (`ZAP_API_URL`); empty string disables the module. */
+    apiUrl: string;
+    /** API key (`ZAP_API_KEY`) sent as `apikey`. */
+    apiKey: string;
+    /** Overall time budget for the active-scan poll loop. */
+    timeoutMs: number;
+    /** Cap on endpoints seeded into ZAP's site tree per scan. */
+    maxSeedUrls: number;
+  };
+  /** Active finding replay (re-verify findings to suppress false positives). */
+  replay: {
+    /** Re-request cheaply-verifiable findings on active scans. */
+    enabled: boolean;
+  };
   /** Recurring-scan scheduler. */
   scheduler: {
     enabled: boolean;
@@ -52,6 +96,16 @@ function flag(name: string, defaultOn: boolean): boolean {
 function cveSource(): AppConfig['cve']['source'] {
   const v = (process.env.CVE_SOURCE ?? 'both').toLowerCase();
   return v === 'local' || v === 'osv' || v === 'both' ? v : 'both';
+}
+
+/** Parse NUCLEI_SEVERITIES (comma list); default medium and up to keep noise down. */
+function nucleiSeverities(): NucleiSeverity[] {
+  const valid: NucleiSeverity[] = ['info', 'low', 'medium', 'high', 'critical', 'unknown'];
+  const raw = (process.env.NUCLEI_SEVERITIES ?? 'medium,high,critical')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s): s is NucleiSeverity => (valid as string[]).includes(s));
+  return raw.length ? raw : ['medium', 'high', 'critical'];
 }
 
 /** Browser metrics are attempted unless explicitly disabled. If Puppeteer is not
@@ -88,11 +142,36 @@ export const config: AppConfig = {
     timeoutMs: int('BROWSER_TIMEOUT_MS', 30_000),
     formFactor: (process.env.BROWSER_FORM_FACTOR ?? 'desktop') === 'mobile' ? 'mobile' : 'desktop',
   },
+  crawl: {
+    maxPages: int('CRAWL_MAX_PAGES', 25),
+    maxDepth: int('CRAWL_MAX_DEPTH', 3),
+    // Reuse the browser engine unless it's explicitly turned off; degrades to
+    // an HTTP-only crawl when Puppeteer isn't installed.
+    renderJs: browserEnabled(),
+    respectRobots: flag('CRAWL_RESPECT_ROBOTS', true),
+  },
+  nuclei: {
+    binaryPath: process.env.NUCLEI_BIN ?? 'nuclei',
+    severities: nucleiSeverities(),
+    rateLimit: int('NUCLEI_RATE_LIMIT', 150),
+    timeoutMs: int('NUCLEI_TIMEOUT_MS', 180_000),
+    maxTargets: int('NUCLEI_MAX_TARGETS', 50),
+    templates: (process.env.NUCLEI_TEMPLATES ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  },
+  zap: {
+    apiUrl: process.env.ZAP_API_URL ?? '',
+    apiKey: process.env.ZAP_API_KEY ?? '',
+    timeoutMs: int('ZAP_TIMEOUT_MS', 300_000),
+    maxSeedUrls: int('ZAP_MAX_SEED_URLS', 100),
+  },
   security: {
     // Safe by default: block internal targets. Set ALLOW_PRIVATE_TARGETS=1 for
     // local development if you need to scan localhost / a LAN host.
     blockPrivateTargets: !flag('ALLOW_PRIVATE_TARGETS', false),
     requireAuthForScan: flag('REQUIRE_AUTH_FOR_SCAN', false),
+  },
+  replay: {
+    enabled: flag('REPLAY_ENABLED', true),
   },
   scheduler: {
     enabled: !['off', 'false', '0', 'no'].includes((process.env.SCHEDULER_ENABLED ?? 'on').toLowerCase()),

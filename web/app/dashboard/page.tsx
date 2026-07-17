@@ -9,6 +9,7 @@ import { useScanStream } from '@/lib/useScanStream';
 import { LiveProgress } from '@/components/LiveProgress';
 import { ReportView } from '@/components/ReportView';
 import { ProjectCard } from '@/components/ProjectCard';
+import type { ScanAuthInput } from '@/lib/types';
 import { RegressionBanner } from '@/components/RegressionBanner';
 import { ApiKeys } from '@/components/ApiKeys';
 import { Webhooks } from '@/components/Webhooks';
@@ -67,11 +68,13 @@ export default function Dashboard() {
     }
   }
 
-  async function runScan(project: Project | null, includeActive: boolean) {
+  async function runScan(project: Project | null, includeActive: boolean, auth?: ScanAuthInput) {
     setReport(null);
     setError(null);
     try {
-      const res = await api.enqueueScan(project ? { projectId: project.id, includeActive } : { target, includeActive: false });
+      const res = await api.enqueueScan(
+        project ? { projectId: project.id, includeActive, ...(auth ?? {}) } : { target, includeActive: false },
+      );
       setScanId(res.scanId);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));

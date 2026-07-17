@@ -36,7 +36,26 @@ async function req<T>(path: string, opts: RequestInit = {}, auth = true): Promis
   if (auth && token) headers.authorization = `Bearer ${token}`;
   const res = await fetch(path, { ...opts, headers });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+
+  let data: { error?: string; message?: string } & Record<string, unknown> = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // Body isn't JSON — almost always a gateway/HTML error page. On Render's
+      // free tier the API sleeps after inactivity, so the first proxied call
+      // gets a holding/timeout page (HTML) instead of JSON. Surface a readable
+      // error instead of a raw "Unexpected token '<'" SyntaxError.
+      const waking = res.status === 502 || res.status === 503 || res.status === 504 || res.status === 408;
+      throw new ApiError(
+        waking ? 'service_waking' : 'bad_response',
+        waking
+          ? 'The API is starting up (free-tier services sleep after inactivity; this can take ~30s). Please try again in a moment.'
+          : `The server returned an unexpected response (HTTP ${res.status}). Please retry.`,
+        res.status,
+      );
+    }
+  }
   if (!res.ok) throw new ApiError(data.error ?? 'request_failed', data.message ?? res.statusText, res.status);
   return data as T;
 }
@@ -67,7 +86,15 @@ export const api = {
   projectHistory: (projectId: string) => req<{ history: { id: string; createdAt: string; score: number }[] }>(`/api/projects/${projectId}/history`),
 
   // async scans
-  enqueueScan: (body: { target?: string; projectId?: string; includeActive?: boolean }) =>
+  enqueueScan: (body: {
+    target?: string;
+    projectId?: string;
+    includeActive?: boolean;
+    authHeaders?: Record<string, string>;
+    authCookie?: string;
+    excludeUrlPatterns?: string[];
+    formLogin?: { loginUrl: string; username: string; password: string };
+  }) =>
     req<{ scanId: string; status: string; stream: string }>('/api/scans', { method: 'POST', body: JSON.stringify(body) }),
   scanStatus: (id: string) => req<{ status: string; report: AuditReport | null; overall: number | null; grade: string | null }>(`/api/scans/${id}`),
 
